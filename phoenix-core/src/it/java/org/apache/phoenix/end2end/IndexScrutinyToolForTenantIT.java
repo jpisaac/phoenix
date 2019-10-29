@@ -179,8 +179,8 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
                 QueryUtil.constructSelectStatement(indexNameGlobal, columnNames.getCastedTargetColNames(), targetPksCsv,
                         HintNode.Hint.NO_INDEX, false);
         assertEquals(selectQuery,
-                "SELECT /*+ NO_INDEX */ CAST(\"COL1\" AS VARCHAR(15)) , CAST(\"ID\" AS INTEGER) , CAST(\"0\".\"NAME\" AS VARCHAR) FROM "
-                        + indexNameGlobal + " WHERE (\"COL1\",\"ID\")");
+                "SELECT /*+ NO_INDEX */ CAST(\"COL1\" AS VARCHAR(15)),CAST(\"ID\" AS INTEGER),CAST(\"0\".\"NAME\" AS VARCHAR) FROM "
+                + indexNameGlobal + " WHERE (\"COL1\",\"ID\")");
     }
 
     /**
