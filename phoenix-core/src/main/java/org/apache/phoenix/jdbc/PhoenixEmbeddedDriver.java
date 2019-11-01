@@ -83,7 +83,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     MINOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MINOR_VERSION),
                     DRIVER_NAME_PROP, DRIVER_NAME));
     
-    PhoenixEmbeddedDriver() {
+    protected PhoenixEmbeddedDriver() {
     }
     
     protected ReadOnlyProps getDefaultProps() {
@@ -136,7 +136,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         return createConnection(url, info);
     }
 
-    protected final Connection createConnection(String url, Properties info) throws SQLException {
+    protected Connection createConnection(String url, Properties info) throws SQLException {
       Properties augmentedInfo = PropertiesUtil.deepCopy(info);
       augmentedInfo.putAll(getDefaultProps().asMap());
       ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
