@@ -37,6 +37,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -64,8 +65,9 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
-    
-    // @Test Disabled. this test flaps -- enable when PHOENIX-5346 is fixed
+
+    @Test
+    @Ignore // Disabling this test in sfdc lightfork until we resolve W-7011774
     public void testMutableTableIndexMaintanenceSaltedSalted() throws Exception {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();

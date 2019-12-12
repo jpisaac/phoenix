@@ -45,6 +45,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.Ignore;
 
 import com.google.common.collect.Maps;
 
@@ -102,8 +103,9 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
         ConnectionQueryServices s4 = conn4.unwrap(PhoenixConnection.class).getQueryServices();
         assertTrue(s1 == s4);
     }
-    
+
     @Test
+    @Ignore // Disabling this test in sfdc lightfork until we resolve W-7011774
     public void testQueryTimeout() throws Exception {
         int nRows = 60000;
         Connection conn;
