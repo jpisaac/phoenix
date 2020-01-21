@@ -42,6 +42,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -98,6 +99,7 @@ public class NullIT extends BaseQueryIT {
     }
     
     @Test
+    @Ignore //Ignoring this test in lightfork until we fix W-7138179
     public void testEmptyStringValue() throws Exception {
         testNoStringValue("");
     }
