@@ -116,6 +116,20 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     }
 
     @Override
+    public int getActiveGeneralRpcHandlerCount() {
+        return delegate.getActiveGeneralRpcHandlerCount();
+    }
+
+    @Override
+    public int getActivePriorityRpcHandlerCount() {
+        return delegate.getActivePriorityRpcHandlerCount();
+    }
+
+    @Override public int getActiveReplicationRpcHandlerCount() {
+        return delegate.getActiveReplicationRpcHandlerCount();
+    }
+
+    @Override
     public long getNumGeneralCallsDropped() {
         return delegate.getNumGeneralCallsDropped();
     }
@@ -123,6 +137,32 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     @Override
     public long getNumLifoModeSwitches() {
         return delegate.getNumLifoModeSwitches();
+    }
+
+    @Override
+    public int getWriteQueueLength() {
+        return delegate.getWriteQueueLength();
+    }
+
+    @Override
+    public int getReadQueueLength() {
+        return delegate.getReadQueueLength();
+    }
+
+    @Override
+    public int getScanQueueLength() {
+        return delegate.getScanQueueLength();
+    }
+
+    @Override
+    public int getActiveWriteRpcHandlerCount() { return delegate.getActiveWriteRpcHandlerCount(); }
+
+    @Override
+    public int getActiveReadRpcHandlerCount() { return delegate.getActiveReadRpcHandlerCount(); }
+
+    @Override
+    public int getActiveScanRpcHandlerCount() {
+        return delegate.getActiveScanRpcHandlerCount();
     }
 
     @VisibleForTesting

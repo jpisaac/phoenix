@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -192,6 +193,11 @@ public class SnapshotScanner extends AbstractClientScanner {
       @Override
       public int getLoadSequence() {
         throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public MetricRegistry getMetricRegistryForRegionServer() {
+        return getSnapshotContextEnvironment(conf).getMetricRegistryForRegionServer();
       }
 
       @Override

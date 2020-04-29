@@ -51,37 +51,25 @@
     <module>phoenix-tracing-webapp</module>
   </modules>
 
-  <repositories>
-    <repository>
-      <id>apache release</id>
-      <url>https://repository.apache.org/content/repositories/releases/</url>
-    </repository>
-    <repository>
-      <id>apache.snapshots</id>
-      <url>https://repository.apache.org/snapshots/</url>
-    </repository>
-  </repositories>
-
   <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>21</version>
+    <groupId>com.salesforce.hbase</groupId>
+    <artifactId>bigdata-parent-pom</artifactId>
+    <version>1.3.2-3.1.10.6</version>
   </parent>
 
   <scm>
-    <connection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</connection>
-    <url>https://git-wip-us.apache.org/repos/asf/phoenix.git</url>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</developerConnection>
+    <connection>scm:git:git@git.soma.salesforce.com:bigdata-packaging/phoenix.git</connection>
+    <developerConnection>scm:git:git@git.soma.salesforce.com:bigdata-packaging/phoenix.git</developerConnection>
+    <url>https://git.soma.salesforce.com/bigdata-packaging/phoenix.git</url>
+    <tag>HEAD</tag>
   </scm>
 
   <properties>
     <!-- The HBase compatibility module that that will be included in
     the shaded JARs and the assembly -->
-    <hbase.profile>1.5</hbase.profile>
+    <hbase.profile>1.3</hbase.profile>
     <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
 
-    <!-- Hadoop Versions -->
-    <hadoop-two.version>2.7.5</hadoop-two.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -89,11 +77,12 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
 
+    <!--hbase.main>1.3.5</hbase.main>
+    <hbase.version>${hbase.main}</hbase.version-->
+
+
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
-    <hive.version>1.2.1</hive.version>
-    <hadoop.version>2.7.1</hadoop.version>
-    <pig.version>0.13.0</pig.version>
     <jackson.version>2.10.3</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
@@ -106,7 +95,6 @@
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.5.0</sqlline.version>
     <guava.version>13.0.1</guava.version>
-    <flume.version>1.4.0</flume.version>
     <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
@@ -122,9 +110,6 @@
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.15.0-incubating</tephra.version>
     <omid.version>1.0.1</omid.version>
-    <spark.version>2.4.0</spark.version>
-    <scala.version>2.11.8</scala.version>
-    <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
     <servlet.api.version>3.1.0</servlet.api.version>
@@ -137,6 +122,12 @@
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
     <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
     <jacoco-maven-plugin.version>0.7.9</jacoco-maven-plugin.version>
+
+    <maven-surefire-plugin.version>2.20</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.20</maven-failsafe-plugin.version>
+
+    <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
+    <maven.assembly.version>2.5.2</maven.assembly.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -209,6 +200,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-assembly-plugin</artifactId>
+          <version>${maven.assembly.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.rat</groupId>
@@ -257,6 +249,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${maven-failsafe-plugin.version}</version>
           <!-- Common settings for all executions -->
           <configuration>
             <encoding>UTF-8</encoding>
@@ -344,6 +337,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-dependency-plugin</artifactId>
+          <version>${maven-dependency-plugin.version}</version>
           <executions>
             <execution>
               <id>create-mrapp-generated-classpath</id>
@@ -395,7 +389,9 @@
                    import java.util.regex.Pattern;
                    import java.lang.Integer;
 
-                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
+                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)-sfdc-(\\d+)\\.(\\d+)\\.(\\d+)");
+                   //versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^-]*$");
+
                    versionMatcher = versionPattern.matcher("${hbase.version}");
                    versionMatcher.find();
 
@@ -479,6 +475,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven-surefire-plugin.version}</version>
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
@@ -1141,7 +1138,7 @@
     </profile>
     <!-- See BUILDING.md for profile selection -->
     <profile>
-      <id>phoenix-hbase-compat-1.5.0-default</id>
+      <id>phoenix-hbase-compat-1.3.0-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
@@ -1150,13 +1147,13 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-1.5.0</artifactId>
+          <artifactId>phoenix-hbase-compat-1.3.0</artifactId>
         </dependency>
       </dependencies>
       <properties>
-        <hbase.profile>1.5</hbase.profile>
-        <hbase.compat.version>1.5.0</hbase.compat.version>
-        <hbase.version>1.5.0</hbase.version>
+        <hbase.profile>1.3</hbase.profile>
+        <hbase.compat.version>1.3.0</hbase.compat.version>
+        <hbase.version>${hbase.main}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1216,7 +1213,7 @@
       <properties>
         <hbase.profile>1.3</hbase.profile>
         <hbase.compat.version>1.3.0</hbase.compat.version>
-        <hbase.version>1.3.5</hbase.version>
+        <hbase.version>${hbase.main}</hbase.version>
       </properties>
     </profile>
     <profile>
