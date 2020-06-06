@@ -60,6 +60,7 @@ import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -960,4 +961,15 @@ public class ScanUtil {
     public static void setClientVersion(Scan scan, int version) {
         scan.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, Bytes.toBytes(version));
     }
+
+    public static boolean isClientSideMaskingEnabled(PhoenixConnection phoenixConnection) {
+        String isClientSideMaskingSet = phoenixConnection.getClientInfo(
+                QueryServices.PHOENIX_TTL_CLIENT_SIDE_MASKING_ENABLED);
+        // If overridden in the connection, return that.
+        if (isClientSideMaskingSet != null) {
+            return Boolean.parseBoolean(isClientSideMaskingSet);
+        }
+        return QueryServicesOptions.withDefaults().isClientSideMaskingEnabled();
+    }
+
 }

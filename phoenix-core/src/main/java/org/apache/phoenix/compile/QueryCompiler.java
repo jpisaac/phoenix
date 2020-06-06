@@ -89,7 +89,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.base.Optional;
-
+import org.apache.phoenix.util.ViewUtil;
 
 /**
  *
@@ -653,9 +653,14 @@ public class QueryCompiler {
         PTable table = tableRef.getTable();
 
         ParseNode viewWhere = null;
-        if (table.getViewStatement() != null) {
+        // Using getPhoenixTTL > 0 as a indicator that view/view-index has PHOENIX_TTL set.
+        if (table.getPhoenixTTL() > 0) {
+            viewWhere = ViewUtil.getViewWhereWithPhoenixTTL(context, table);
+        }
+        if ((table.getViewStatement() != null) && (viewWhere == null)) {
             viewWhere = new SQLParser(table.getViewStatement()).parseQuery().getWhere();
         }
+
         Integer limit = LimitCompiler.compile(context, select);
 
         CompiledOffset compiledOffset = null;

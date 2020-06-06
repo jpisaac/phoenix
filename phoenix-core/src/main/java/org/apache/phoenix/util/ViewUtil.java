@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnNameTrackingExpressionCompiler;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.TableInfo;
@@ -58,8 +59,11 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
@@ -642,4 +646,45 @@ public class ViewUtil {
 
         }
     }
+
+    public static ParseNode getViewWhereWithPhoenixTTL(StatementContext context, PTable table)
+            throws SQLException {
+        ParseNode viewWhere = null;
+        String viewStatement = null;
+
+        // If client side masking for PHOENIX_TTL is not enabled just return.
+        if (!ScanUtil.isClientSideMaskingEnabled(context.getConnection())) {
+            return viewWhere;
+        }
+
+        String viewTTLFilterClause = context.getConnection().getSCN() == null ?
+                String.format(
+                        "((TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(phoenix_row_timestamp())) < %d)",
+                        table.getPhoenixTTL()) :
+                String.format(
+                "((%d - TO_NUMBER(phoenix_row_timestamp())) < %d)",
+                        context.getConnection().getSCN(), table.getPhoenixTTL());
+
+        if (table.getViewStatement() != null) {
+            viewStatement = table.getViewStatement();
+        } else if (table.getType() == PTableType.INDEX) {
+            String schemaName = table.getParentSchemaName().getString();
+            String tableName = table.getParentTableName().getString();
+            PTable dataTable =
+                    PhoenixRuntime.getTable(context.getConnection(),
+                            SchemaUtil.getTableName(schemaName, tableName));
+            viewStatement = IndexUtil
+                    .rewriteViewStatement(context.getConnection(), table, dataTable,
+                            dataTable.getViewStatement());
+        }
+        if (viewStatement != null) {
+            ParseNodeFactory nodeFactory = new ParseNodeFactory();
+            ParseNode viewTTLFilter = SQLParser.parseCondition(viewTTLFilterClause);
+            ParseNode viewStmtWhere = new SQLParser(viewStatement).parseQuery().getWhere();
+            List<ParseNode> children = Lists.newArrayList(viewStmtWhere, viewTTLFilter);
+            viewWhere = nodeFactory.and(children);
+        }
+        return viewWhere;
+    }
+
 }
