@@ -20,23 +20,23 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.regionserver.*;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.TimeRange;
-import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixTTLSource;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -335,5 +335,221 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
         public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
             return new PhoenixTTLRegionScanner(env, scan, ((BaseRegionScanner)delegate).getNewRegionScanner(scan));
         }
+    }
+
+
+    private static class PhoenixTTLStoreScanner extends StoreScanner {
+        Scan viewScan;
+        private long minTimestamp;
+        private long maxTimestamp;
+        private long now;
+        private byte[] emptyCF;
+        private byte[] emptyCQ;
+        private Region region;
+
+        public void setRegion(Region region) {
+            this.region = region;
+        }
+
+
+        public PhoenixTTLStoreScanner(HStore store, ScanInfo scanInfo, Scan viewScan,
+                                    List<? extends KeyValueScanner> scanners, ScanType scanType, long smallestReadPoint,
+                                    long earliestPutTs) throws IOException {
+
+            super(store, scanInfo, scanners, scanType, smallestReadPoint, earliestPutTs);
+            this.viewScan = viewScan;
+            emptyCF = viewScan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
+            emptyCQ = viewScan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
+
+            minTimestamp = viewScan.getTimeRange().getMin();
+            maxTimestamp = viewScan.getTimeRange().getMax();
+            now = maxTimestamp != HConstants.LATEST_TIMESTAMP ? maxTimestamp : EnvironmentEdgeManager.currentTimeMillis();
+            LOG.info(String.format("***** 0.PHOENIX-TTL(Store): %s, %s ************",
+                    store.getTableName().getNameAsString(), store.getColumnFamilyName()));
+
+        }
+
+        @Override public boolean next(List<Cell> outResult, ScannerContext scannerContext)
+                throws IOException {
+
+            LOG.info("0.TTLAwareStoreScanner scanner for PHOENIX-TTL. Stacktrace for informational purposes: "
+                    +  LogUtil.getCallerStackTrace());
+
+            LOG.info(String.format("***** 3.PHOENIX-TTL(Store): In next [%d] ************,", outResult.size()));
+            //boolean hasMore = this.regionScanner.next(outResult, NoLimitScannerContext.getInstance());
+            boolean hasMore = super.next(outResult, NoLimitScannerContext.getInstance());
+            if (outResult != null && outResult.size() > 0 && checkEmptyColumnExpired(outResult)) {
+                LOG.info(String.format("***** 7.PHOENIX-TTL(Store): after skipRowIfExpired ************"));
+                outResult.clear();
+            }
+            return hasMore;
+        }
+
+        private boolean checkEmptyColumnExpired(List<Cell> cellList) throws IOException {
+            LOG.info(String.format("***** 4.PHOENIX-TTL(Store): In skipRowIfExpired [%d] ************", cellList.size()));
+
+            Iterator<Cell> cellIterator = cellList.iterator();
+            Cell firstCell = cellIterator.next();
+            byte[] rowKey = new byte[firstCell.getRowLength()];
+            System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(), rowKey, 0, firstCell.getRowLength());
+            LOG.info(String.format("***** 5.PHOENIX-TTL(Store): Get Row row = %s ****** ", Bytes.toString(rowKey)));
+
+            Get get = new Get(rowKey);
+            get.setFilter(viewScan.getFilter());
+            //get.setTimeRange(minTimestamp, maxTimestamp);
+            //get.addColumn(emptyCF, emptyCQ);
+            Result result = region.get(get);
+            if (result.isEmpty()) {
+                LOG.warn("6.PHOENIX-TTL(Store) The empty column does not exist in a row in " + region.getRegionInfo().getTable().getNameAsString());
+                return false;
+            }
+            return ScanUtil.isTTLExpired(result.getColumnLatestCell(emptyCF, emptyCQ), this.viewScan, this.now);
+        }
+
+
+        private boolean skipRowIfExpired(List<Cell> cellList) throws IOException {
+
+            LOG.info(String.format("***** 4.PHOENIX-TTL(Store): In skipRowIfExpired [%d] ************", cellList.size()));
+            long cellListSize = cellList.size();
+            if (cellListSize == 0) {
+                return true;
+            }
+
+            Iterator<Cell> cellIterator = cellList.iterator();
+            Cell firstCell = cellIterator.next();
+            byte[] rowKey = new byte[firstCell.getRowLength()];
+            System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(), rowKey, 0, firstCell.getRowLength());
+            long ttl = ScanUtil.getPhoenixTTL(this.viewScan) ;
+            long ts = getMaxTimestampCell(cellList).getTimestamp();
+            byte[] existingStartKey = viewScan.getStartRow();
+            byte[] existingStopKey = viewScan.getStopRow();
+            boolean isRowExpired = false;
+            if ((Bytes.compareTo(existingStartKey, rowKey) < 0) && (Bytes.compareTo(rowKey, existingStopKey) < 0)) {
+                if (ts + ttl < now) {
+                    isRowExpired = true;
+                }
+                LOG.info(String.format("***** 5.PHOENIX-TTL(Store): Found Row = expired = %s", isRowExpired));
+            }
+            LOG.info(String.format("***** 6.PHOENIX-TTL(Store): Skipping Row row = %s, ttl = %d, "
+                            + "delete-ts = %d, max-ts = %d, isRowExpired = %s ****** ",
+                    Bytes.toString(rowKey),
+                    ttl,
+                    now-ttl,
+                    ts,
+                    isRowExpired));
+
+            if (isRowExpired) {
+                return true;
+            }
+            return false;
+        }
+        private Cell getMaxTimestampCell(List<Cell> cellList) {
+            long maxTs = 0;
+            long ts = 0;
+            Cell maxTsCell = null;
+            Iterator<Cell> cellIterator = cellList.iterator();
+            while (cellIterator.hasNext()) {
+                Cell cell = cellIterator.next();
+                ts = cell.getTimestamp();
+                if (ts > maxTs) {
+                    maxTs = ts;
+                    maxTsCell = cell;
+                }
+            }
+            return maxTsCell;
+        }
+    }
+
+    @Override
+    public void preCompactSelection(ObserverContext<RegionCoprocessorEnvironment> c, Store store, List<? extends StoreFile> candidates, CompactionLifeCycleTracker tracker) throws IOException {
+        super.preCompactSelection(c, store, candidates, tracker);
+    }
+
+    @Override
+    public void postCompactSelection(ObserverContext<RegionCoprocessorEnvironment> c, Store store, List<? extends StoreFile> selected, CompactionLifeCycleTracker tracker, CompactionRequest request) {
+        super.postCompactSelection(c, store, selected, tracker, request);
+
+        if (request != null && request.getClass().isAssignableFrom(
+                PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest.class)) {
+
+            Scan scan = ((PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest) request).getScan();
+            String tenantId = Bytes.toString(scan.getAttribute("__TenantId"));
+            String viewName = Bytes.toString(scan.getAttribute("__ViewName"));
+            String startRow = Bytes.toString(scan.getStartRow());
+            String stopRow = Bytes.toString(scan.getStopRow());
+            String filter = scan.getFilter() != null ? scan.getFilter().toString() : "NO_FILTER";
+
+            LOG.info(String.format(
+                    "********** 1.PHOENIX-TTL(Store): TTLAwareRegionObserver::preCompactSelection "
+                            + "region = [%s], "
+                            + "tenantId = %s  "
+                            + "viewName = %s  "
+                            + "startRow = %s  "
+                            + "stopRow = %s  "
+                            + "filter = %s  "
+                            + "***************",
+                    c.getEnvironment().getRegionInfo().getRegionNameAsString(),
+                    tenantId,
+                    viewName,
+                    startRow,
+                    stopRow,
+                    filter));
+
+            //return new TTLAwareRegionScanner(c.getEnvironment(), scan, s);
+        }
+
+    }
+
+    @Override
+    public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker, CompactionRequest request) throws IOException {
+        super.preCompactScannerOpen(c, store, scanType, options, tracker, request);
+    }
+
+    @Override
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store, InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker, CompactionRequest request) throws IOException {
+        if (request != null && request.getClass().isAssignableFrom(
+                PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest.class)) {
+            //c.bypass();
+            //c.complete();
+            Configuration conf = c.getEnvironment().getConfiguration();
+            HStore thisStore = ((HStore)store);
+
+
+
+            Scan scan = ((PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest) request).getScan();
+            String tenantId = Bytes.toString(scan.getAttribute("__TenantId"));
+            String viewName = Bytes.toString(scan.getAttribute("__ViewName"));
+            String startRow = Bytes.toString(scan.getStartRow());
+            String stopRow = Bytes.toString(scan.getStopRow());
+            String filter = scan.getFilter() != null ? scan.getFilter().toString() : "NO_FILTER";
+
+            LOG.info(String.format(
+                    "********** 2.PHOENIX-TTL(Store): TTLAwareRegionObserver::preCompactScannerOpen "
+                            + "region = [%s], "
+                            + "tenantId = %s  "
+                            + "viewName = %s  "
+                            + "startRow = %s  "
+                            + "stopRow = %s  "
+                            + "filter = %s  "
+                            + "***************",
+                    c.getEnvironment().getRegionInfo().getRegionNameAsString(),
+                    tenantId,
+                    viewName,
+                    startRow,
+                    stopRow,
+                    filter));
+
+
+            Region region = c.getEnvironment().getRegion();
+//            RegionScanner scanner = region.getScanner(scan);
+            PhoenixTTLStoreScanner storeScanner =  new PhoenixTTLRegionObserver.PhoenixTTLStoreScanner(thisStore, thisStore.getScanInfo(),
+                    scan,
+                    Lists.newArrayList(),
+                    scanType, store.getSmallestReadPoint(), HConstants.NO_NONCE);
+            storeScanner.setRegion(region);
+            return storeScanner;
+
+        }
+        return super.preCompact(c, store, scanner, scanType, tracker, request);
     }
 }

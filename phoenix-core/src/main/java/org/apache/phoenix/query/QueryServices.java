@@ -341,7 +341,6 @@ public interface QueryServices extends SQLCloseable {
     // The time limit on the amount of work to be done in one RPC call
     public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
 
-
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent
     // table column metadata along with the child view metadata. When we resolve a child view, we
