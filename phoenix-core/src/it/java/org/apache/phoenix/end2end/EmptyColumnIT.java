@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataSupplier;
@@ -798,6 +799,82 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test public void testCompactionsOptions() throws Exception {
+
+        StringBuilder withTableProps = new StringBuilder();
+        withTableProps.append("MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='Z'");
+
+        for (OtherOptions options : getTestsOptions()) {
+
+            // Define the test schema
+            TableOptions tableOptions = TableOptions.withDefaults();
+            tableOptions.setTableProps(withTableProps.toString());
+
+            GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
+            globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", 180000));
+
+            TenantViewOptions tenantViewOptions = new TenantViewOptions();
+            tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
+            tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
+
+            final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+            schemaBuilder
+                    .withTableOptions(tableOptions)
+                    .withGlobalViewOptions(globalViewOptions)
+                    .withTenantViewOptions(tenantViewOptions)
+                    .withOtherOptions(options).build();
+
+            // Define the test data.
+            DataSupplier dataSupplier = new DataSupplier() {
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String id = String.format("00A0y000%07d", rnd.nextInt(MAX_ROWS));
+                    String col1 = String.format("a%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col2 = String.format("b%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col3 = String.format("c%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    return Lists.newArrayList(
+                            new Object[] { id, col1, col2, col3, col4, col5, col6, col7, col8,
+                                    col9 });
+                }
+            };
+
+            // Create a test data writer for the above schema.
+            DataWriter dataWriter = new BasicDataWriter();
+            String
+                    tenantConnectUrl =
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions()
+                            .getTenantId();
+            try (Connection connection = DriverManager.getConnection(tenantConnectUrl)) {
+                connection.setAutoCommit(true);
+                dataWriter.setConnection(connection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(
+                        Lists.newArrayList("ID",
+                                "COL1", "COL2", "COL3",
+                                "COL4", "COL5", "COL6",
+                                "COL7", "COL8", "COL9"));
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // dataSupplier.upsertValues column positions to be used for partial updates.
+                List<Integer> columnsForPartialUpdates = Lists.newArrayList(0, 7, 9);
+                // Write the data and run validations
+                ExpectedTestResults
+                        expectedTestResults =
+                        new ExpectedTestResults(DEFAULT_NUM_ROWS, 0, 0);
+                upsertDataAndRunValidations(DEFAULT_NUM_ROWS, expectedTestResults, dataWriter,
+                        schemaBuilder, columnsForPartialUpdates);
+            }
+        }
+
+    }
+
     private void upsertDataAndRunValidations(int numRowsToUpsert,
             ExpectedTestResults expectedTestResults, DataWriter dataWriter,
             SchemaBuilder schemaBuilder, List<Integer> overriddenColumnsPositions)
@@ -1032,6 +1109,17 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
         testCases.add(testCaseWhenDefaultCFs);
         return testCases;
 
+    }
+
+    private List<OtherOptions> getTestsOptions() {
+        List<OtherOptions> testCases = Lists.newArrayList();
+        OtherOptions testCaseWhenGlobalAndTenantCFsAreDiff = new OtherOptions();
+        testCaseWhenGlobalAndTenantCFsAreDiff.setTestName("testCaseWhenGlobalAndTenantCFsAreDiff");
+        testCaseWhenGlobalAndTenantCFsAreDiff.setTableCFs(Lists.newArrayList(null, "A", "B"));
+        testCaseWhenGlobalAndTenantCFsAreDiff.setGlobalViewCFs(Lists.newArrayList("A", "A", "A"));
+        testCaseWhenGlobalAndTenantCFsAreDiff.setTenantViewCFs(Lists.newArrayList("B", "B", "B"));
+        testCases.add(testCaseWhenGlobalAndTenantCFsAreDiff);
+        return testCases;
     }
 
     private List<OtherOptions> getTableAndGlobalAndTenantColumnFamilyOptions() {

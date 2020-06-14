@@ -1,0 +1,328 @@
+package org.apache.phoenix.end2end;
+
+import com.google.protobuf.RpcController;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.phoenix.coprocessor.PhoenixTTLCompactorEndpoint;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.coprocessor.Batch;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
+import org.apache.hadoop.hbase.util.Bytes;
+import com.google.protobuf.RpcCallback;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos.CompactionService;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos.PhoenixTTLExpiredCompactionRequest;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos.PhoenixTTLExpiredCompactionResponse;
+
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.PhoenixTestBuilder;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+
+public class ViewTTLCompactionIT extends LocalHBaseIT {
+    private static final Logger LOG = LoggerFactory.getLogger(ViewTTLCompactionIT.class);
+
+    //String tenantId = "00D0t001T000001";
+    String multiTenantTableName = "TEST_ENTITY.BASE_HBPO_WITH_TTL";
+    String multiTenantGlobalView = "TEST_ENTITY.GLOBAL_V000001_WITH_TTL";
+    String multiTenantViewName = "TEST_ENTITY.ECZ";
+
+    @Test public void testViewCompaction() throws Exception {
+        String tenantId = "00D0t001T000001";
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        String schema = generateUniqueName();
+
+        //String multiTenantTableName = schema + "." + generateUniqueName();
+        String globalViewName = schema + "." + generateUniqueName();
+
+        String view1 = generateUniqueName();
+        String view2 = generateUniqueName();
+        String customObjectView1 = schema + "." + view1;
+        String customObjectView2 = schema + "." + view2;
+
+        String tenantView = generateUniqueName();
+        String tenantViewOnGlobalView = schema + "." + tenantView;
+        String tenantViewIndex = tenantView + "_INDEX";
+        String tenantIndex = schema + "." + tenantViewIndex;
+
+
+        String
+                multiTenantTableDDL =
+                "CREATE TABLE IF NOT EXISTS " + multiTenantTableName
+                        + "(TENANT_ID CHAR(15) NOT NULL, KP CHAR(3) NOT NULL, ID VARCHAR, NUM BIGINT "
+                        + "CONSTRAINT PK PRIMARY KEY (TENANT_ID, KP)) MULTI_TENANT=true, PHOENIX_TTL=120";
+
+        String
+                multiTenantGlobalViewDDL =
+                "CREATE VIEW IF NOT EXISTS " + multiTenantGlobalView + "(G1 BIGINT, G2 BIGINT) "
+                        + "AS SELECT * FROM " + multiTenantTableName + " WHERE KP = 'ECZ' PHOENIX_TTL=30";
+
+        String
+                globalViewDDL =
+                "CREATE VIEW IF NOT EXISTS " + globalViewName + "(G1 BIGINT, G2 BIGINT) "
+                        + "AS SELECT * FROM " + multiTenantTableName + " WHERE KP = '001' PHOENIX_TTL=30";
+
+        String multiTenantViewDDL = "CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s";
+        String viewDDL = "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) AS SELECT * FROM %s";
+        String
+                viewIndexDDL =
+                "CREATE INDEX IF NOT EXISTS " + tenantViewIndex + " ON " + tenantViewOnGlobalView
+                        + "(NUM DESC) INCLUDE (ID)";
+
+        String
+                customObjectViewDDL =
+                "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) " + "AS SELECT * FROM "
+                        + multiTenantTableName + " WHERE KP = '%s' ";
+
+        String selectFromViewSQL = "SELECT * FROM %s";
+
+        List<String> dmls = Arrays.asList(new String[] {
+                String.format(multiTenantViewDDL, multiTenantViewName, multiTenantGlobalView),
+                String.format(viewDDL, tenantViewOnGlobalView, globalViewName),
+                String.format(customObjectViewDDL, customObjectView1, view1),
+                String.format(customObjectViewDDL, customObjectView2, view2),
+                viewIndexDDL
+        });
+
+        // Create the various tables and views
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Base table.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(multiTenantTableDDL);
+            }
+            // Global view.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(multiTenantGlobalViewDDL);
+            }
+
+            // Global view.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(globalViewDDL);
+            }
+
+            // Tenant views and indexes.
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                for (String dml : dmls) {
+                    try (Statement stmt = tenantConn.createStatement()) {
+                        stmt.execute(dml);
+                    }
+                }
+            }
+        }
+
+
+        Scan clientScan = getScan(tenantViewOnGlobalView, false, tenantId, 120000, KeepDeletedCells.TTL, Integer.MAX_VALUE, 1);
+        ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(clientScan);
+        byte[] srcBytes = srcProtoScan.toByteArray();
+        ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(srcBytes);
+        Scan serverScan = ProtobufUtil.toScan(destProtoScan);
+
+        // Compact the various tables and views
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Table parentTable = conn.unwrap(PhoenixConnection.class).getQueryServices().
+                    getTable(Bytes.toBytes(multiTenantTableName));
+            //compactView(parentTable, multiTenantViewName, srcProtoScan);
+        } catch (Throwable throwable) {
+            throwable.printStackTrace();
+        }
+
+    }
+
+
+
+
+    void compactView(Table parentTable, final String multiTenantViewName, final ClientProtos.Scan srcProtoScan) throws Throwable {
+
+        final Map<byte[], PhoenixTTLExpiredCompactionResponse>
+                results =
+                parentTable.coprocessorService(CompactionService.class, null, null,
+                        new Batch.Call<CompactionService, PhoenixTTLExpiredCompactionResponse>() {
+                            @Override
+                            public PhoenixTTLExpiredCompactionResponse call(
+                                    CompactionService instance)
+                                    throws IOException {
+                                ServerRpcController controller = new ServerRpcController();
+                                BlockingRpcCallback<PhoenixTTLExpiredCompactionResponse>
+                                        rpcCallback =
+                                        new BlockingRpcCallback<PhoenixTTLExpiredCompactionResponse>();
+                                CompactionProtos.PhoenixTTLExpiredCompactionRequest.Builder
+                                        builder =
+                                        CompactionProtos.PhoenixTTLExpiredCompactionRequest
+                                                .newBuilder();
+                                //builder.setPhoenixTTL(180000);
+                                builder.setSerializedScanFilter(srcProtoScan.toByteString());
+                                instance.compactPhoenixTTLExpiredRows(controller, builder.build(), rpcCallback);
+                                if (controller.getFailedOn() != null) {
+                                    throw controller.getFailedOn();
+                                }
+                                return rpcCallback.get();
+                            }
+                        });
+        if (results.isEmpty()) {
+            throw new IOException("Didn't get expected result size");
+        }
+        CompactionProtos.PhoenixTTLExpiredCompactionResponse
+                tmpResponse =
+                results.values().iterator().next();
+        return;
+    }
+
+    @Test public void testCompaction() throws Exception {
+        boolean tenant = true;
+        String tenantId = "Txt00m100000075";
+//        String parentTableName = "PHX_TTL.CUSTOM_DATA";
+//        String viewName = "PHX_TTL.C01";
+//        Scan clientScan = getScan(viewName, tenant, tenantId, 120000, KeepDeletedCells.TTL, Integer.MAX_VALUE, 1);
+
+        String parentTableName = "TEST_ENTITY.CUSTOM_T000002_WITH_TTL";
+        String viewName = "TEST_ENTITY.CUSTOM_T000002_WITH_TTL";
+        Scan clientScan = getScan(viewName, !tenant, "", 60000 * 3, KeepDeletedCells.TTL, Integer.MAX_VALUE, 1);
+
+        //Scan clientScan = getScan(multiTenantGlobalView, global);
+        ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(clientScan);
+        byte[] srcBytes = srcProtoScan.toByteArray();
+        ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(srcBytes);
+        Scan serverScan = ProtobufUtil.toScan(destProtoScan);
+
+        // Compact the various tables and views
+        String connectUrl = !tenant ? getUrl() :
+                getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+
+        try (Connection conn = DriverManager.getConnection(connectUrl)) {
+            Table parentTable = conn.unwrap(PhoenixConnection.class).getQueryServices().
+                    getTable(Bytes.toBytes(parentTableName));
+            compactView(parentTable, viewName, srcProtoScan);
+        } catch (Throwable throwable) {
+            throwable.printStackTrace();
+        }
+    }
+
+    @Test public void testScans() throws Exception {
+
+        boolean tenant = true;
+        String tenantId = "Txt00m100000079";
+        //Scan scan = getScan("PHX_TTL.CF6", tenant, tenantId);
+        Scan scan = getScan("TEST_ENTITY.CUSTOM_T000002_WITH_TTL", !tenant, "", 120000, KeepDeletedCells.TTL, Integer.MAX_VALUE, 1);
+        ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(scan);
+        byte[] srcBytes = srcProtoScan.toByteArray();
+        ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(srcBytes);
+        Scan serverScan = ProtobufUtil.toScan(destProtoScan);
+
+        LOG.info(String.format("1.startRow : %s", Bytes.toStringBinary(scan.getStartRow())));
+        LOG.info(String.format("1.stopRow : %s", Bytes.toString(scan.getStopRow())));
+        LOG.info(String.format("1.filter : %s", scan.getFilter() != null ? scan.getFilter().toString() : "NO_FILTER"));
+        LOG.info(String.format("1.ECFN : %s", Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME))));
+        LOG.info(String.format("1.ECQN : %s", Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME))));
+
+        LOG.info(String.format("2.startRow : %s", Bytes.toStringBinary(serverScan.getStartRow())));
+        LOG.info(String.format("2.stopRow : %s", Bytes.toString(serverScan.getStopRow())));
+        LOG.info(String.format("2.filter : %s", serverScan.getFilter() != null ? serverScan.getFilter().toString() : "NO_FILTER"));
+        LOG.info(String.format("2.ECFN : %s", Bytes.toString(serverScan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME))));
+        LOG.info(String.format("2.ECQN : %s", Bytes.toString(serverScan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME))));
+
+    }
+
+    private Scan getScan(String entityName, boolean tenant, String tenantId, long storeTTL, KeepDeletedCells kdc, int maxVersions, int minVersions)
+            throws SQLException {
+
+        Properties props = new Properties();
+        props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
+        String connectUrl = !tenant ? getUrl() :
+                 getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+
+        try (Connection deleteConnection = DriverManager.getConnection(connectUrl, props);
+                final Statement statement = deleteConnection.createStatement()) {
+            deleteConnection.setAutoCommit(true);
+
+            final String deleteIfExpiredStatement = String.format("select * from  %s", entityName);
+
+            /*
+            final String
+                    deleteIfExpiredStatement =
+                    String.format("select * from %s where %s", viewName, String.format(
+                            "((TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(phoenix_row_timestamp())) > %d)",
+                            600000));
+
+
+             */
+
+
+            Preconditions.checkNotNull(deleteIfExpiredStatement);
+
+            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
+            // Optimize the query plan so that we potentially use secondary indexes
+            final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
+            final Scan scan = queryPlan.getContext().getScan();
+
+            PTable
+                    table =
+                    PhoenixRuntime.getTable(deleteConnection,
+                            tenantId, entityName);
+
+            byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
+            byte[]
+                    emptyColumnName =
+                    table.getEncodingScheme()
+                            == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                            QueryConstants.EMPTY_COLUMN_BYTES :
+                            table.getEncodingScheme()
+                                    .encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME,
+                    emptyColumnFamilyName);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME,
+                    emptyColumnName);
+            scan.setAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED,
+                    PDataType.TRUE_BYTES);
+            scan.setAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED,
+                    PDataType.FALSE_BYTES);
+            scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL,
+                    Bytes.toBytes(Long.valueOf(table.getPhoenixTTL())));
+            scan.setAttribute("__TenantId", Bytes.toBytes(tenantId));
+            scan.setAttribute("__EntityName", Bytes.toBytes(entityName));
+            scan.setAttribute("__StoreTTL", Bytes.toBytes(storeTTL));
+            scan.setAttribute("__KeepDeletedCells", Bytes.toBytes(kdc.name()));
+            scan.setAttribute("__MaxVersions", Bytes.toBytes(maxVersions));
+            scan.setAttribute("__MinVersions", Bytes.toBytes(minVersions));
+
+            return scan;
+//            PhoenixResultSet
+//                    rs =
+//                    pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(),
+//                            queryPlan.getContext());
+        }
+    }
+
+}

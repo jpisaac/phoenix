@@ -159,7 +159,6 @@ public class QueryServicesOptions {
     public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
     public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
     public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = true;
-
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
     public final static long DEFAULT_MUTATE_BATCH_SIZE_BYTES = 2097152;
@@ -859,6 +858,15 @@ public class QueryServicesOptions {
 
     public QueryServicesOptions setSequenceCacheSize(long sequenceCacheSize) {
         config.setLong(SEQUENCE_CACHE_SIZE_ATTRIB, sequenceCacheSize);
+        return this;
+    }
+
+    public boolean isServerSideMaskingEnabled() {
+        return config.getBoolean(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED);
+    }
+
+    public QueryServicesOptions setServerSideMaskingEnabled(boolean flag) {
+        config.setBoolean(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, flag);
         return this;
     }
 }

@@ -167,6 +167,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
+import org.apache.phoenix.coprocessor.PhoenixTTLCompactorEndpoint;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
@@ -1174,7 +1175,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     builder.addCoprocessor(
                             PhoenixTTLRegionObserver.class.getName(), null, priority-2, null);
                 }
+                if (!newDesc.hasCoprocessor(PhoenixTTLCompactorEndpoint.class.getName())) {
+                    builder.addCoprocessor(
+                            PhoenixTTLCompactorEndpoint.class.getName(), null, priority, null);
+                }
             }
+
+
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
                     builder.addCoprocessor(
