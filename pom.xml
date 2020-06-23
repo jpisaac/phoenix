@@ -44,6 +44,7 @@
     <module>phoenix-hbase-compat-1.4.0</module>
     <module>phoenix-hbase-compat-1.3.0</module>
     <module>phoenix-core</module>
+    <module>phoenix-pig</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client</module>
     <module>phoenix-server</module>
@@ -122,6 +123,12 @@
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
     <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
     <jacoco-maven-plugin.version>0.7.9</jacoco-maven-plugin.version>
+
+    <maven-surefire-plugin.version>2.20</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.20</maven-failsafe-plugin.version>
+
+    <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
+    <maven.assembly.version>2.5.2</maven.assembly.version>
 
     <maven-surefire-plugin.version>2.20</maven-surefire-plugin.version>
     <maven-failsafe-plugin.version>2.20</maven-failsafe-plugin.version>

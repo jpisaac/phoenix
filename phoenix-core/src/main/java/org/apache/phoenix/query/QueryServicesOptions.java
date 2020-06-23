@@ -365,7 +365,8 @@ public class QueryServicesOptions {
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
     public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
 
-	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
+    // set default split to false for the internal testing
+	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = false;
 
     public static final String DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS = "org.apache.phoenix.query.DefaultGuidePostsCacheFactory";
 
