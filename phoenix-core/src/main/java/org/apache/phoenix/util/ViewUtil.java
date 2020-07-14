@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import com.google.inject.internal.util.$Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -49,6 +50,7 @@ import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnNameTrackingExpressionCompiler;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -58,9 +60,12 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.DropTableStatement;
+import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -647,7 +652,8 @@ public class ViewUtil {
         }
     }
 
-    public static ParseNode getViewWhereWithPhoenixTTL(StatementContext context, PTable table)
+    public static ParseNode getViewWhereWithPhoenixTTL(StatementContext context,
+            PTable table)
             throws SQLException {
         ParseNode viewWhere = null;
         String viewStatement = null;
@@ -665,17 +671,39 @@ public class ViewUtil {
                 "((%d - TO_NUMBER(phoenix_row_timestamp())) < %d)",
                         context.getConnection().getSCN(), table.getPhoenixTTL());
 
-        if (table.getViewStatement() != null) {
-            viewStatement = table.getViewStatement();
-        } else if (table.getType() == PTableType.INDEX) {
-            String schemaName = table.getParentSchemaName().getString();
-            String tableName = table.getParentTableName().getString();
-            PTable dataTable =
+        PTable dataTable = table;
+        String tableName = table.getTableName().getString();
+        if (table.getType() == PTableType.INDEX) {
+            String parentSchemaName = table.getParentSchemaName().getString();
+            String parentTableName = table.getParentTableName().getString();
+
+            // Look up the parent view as we could have inherited this index from an ancestor
+            // view(V) with Index (VIndex) -> child view (V1) -> grand child view (V2)
+            // the view index name will be V2#V1#VIndex
+            if (tableName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                String parentViewName =
+                        SchemaUtil.getSchemaNameFromFullName(tableName,
+                                QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                parentSchemaName = SchemaUtil.getSchemaNameFromFullName(parentViewName);
+                parentTableName = SchemaUtil.getTableNameFromFullName(parentViewName);
+            }
+
+            dataTable =
                     PhoenixRuntime.getTable(context.getConnection(),
-                            SchemaUtil.getTableName(schemaName, tableName));
-            viewStatement = IndexUtil
-                    .rewriteViewStatement(context.getConnection(), table, dataTable,
+                            SchemaUtil.getTableName(parentSchemaName, parentTableName));
+            viewStatement = IndexUtil.rewriteViewStatement(context.getConnection(), table, dataTable,
                             dataTable.getViewStatement());
+
+            viewTTLFilterClause =
+                    context.getConnection().getSCN() == null ?
+                            String.format(
+                                    "((TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(phoenix_row_timestamp())) < %d)",
+                                    dataTable.getPhoenixTTL()) :
+                            String.format("((%d - TO_NUMBER(phoenix_row_timestamp())) < %d)",
+                                    context.getConnection().getSCN(), dataTable.getPhoenixTTL());
+
+        } else if ((table.getType() == PTableType.VIEW) && (table.getViewStatement() != null)) {
+            viewStatement = table.getViewStatement();
         }
         if (viewStatement != null) {
             ParseNodeFactory nodeFactory = new ParseNodeFactory();
@@ -683,6 +711,8 @@ public class ViewUtil {
             ParseNode viewStmtWhere = new SQLParser(viewStatement).parseQuery().getWhere();
             List<ParseNode> children = Lists.newArrayList(viewStmtWhere, viewTTLFilter);
             viewWhere = nodeFactory.and(children);
+            StringBuilder debugStr = new StringBuilder();
+            viewWhere.toSQL(context.getResolver(), debugStr);
         }
         return viewWhere;
     }

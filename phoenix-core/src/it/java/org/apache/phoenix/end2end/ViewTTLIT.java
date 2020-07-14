@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataReader;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataReader;
@@ -780,6 +781,157 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             dataReader.setRowKeyColumns(rowKeyColumns1);
             dataReader.setDML(String.format("SELECT id, col6 from %s where col4 = '%s'",
                     schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
+
+            // Validate data before and after ttl expiration.
+            validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
+
+        }
+    }
+
+
+    /**
+     * Ensure/validate that correct parent's phoenix ttl value is used when queries are using the
+     * index.
+     *
+     * @throws Exception
+     */
+    @Test public void testWithSQLUsingIndexAndMultiLevelViews() throws Exception {
+
+        long phoenixTTL = 10000;
+        TableOptions tableOptions = TableOptions.withDefaults();
+        tableOptions.getTableColumns().clear();
+        tableOptions.getTableColumnTypes().clear();
+
+        GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
+        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+
+        GlobalViewIndexOptions
+                globalViewIndexOptions =
+                SchemaBuilder.GlobalViewIndexOptions.withDefaults();
+        globalViewIndexOptions.setLocal(false);
+
+        TenantViewOptions tenantViewOptions = new TenantViewOptions();
+        tenantViewOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
+        tenantViewOptions
+                .setTenantViewColumnTypes(asList("CHAR(15)", "VARCHAR", "VARCHAR", "VARCHAR"));
+
+
+        OtherOptions testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
+        testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
+        testCaseWhenAllCFMatchAndAllDefault
+                .setTableCFs(Lists.newArrayList((String) null, null, null));
+        testCaseWhenAllCFMatchAndAllDefault
+                .setGlobalViewCFs(Lists.newArrayList((String) null, null, null));
+        testCaseWhenAllCFMatchAndAllDefault
+                .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
+
+        // Define the test schema.
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
+                .withGlobalViewIndexOptions(globalViewIndexOptions)
+                .withTenantViewOptions(tenantViewOptions)
+                .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).build();
+
+
+        String level3ViewName = String.format("%s.%s",
+                PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME, "E11");
+        String level3ViewCreateSQL = String.format("CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s",
+                level3ViewName,
+                schemaBuilder.getEntityTenantViewName());
+        String tConnectUrl = getUrl() + ';' + TENANT_ID_ATTRIB + '='
+                + schemaBuilder.getDataOptions().getTenantId();
+        try (Connection tConnection = DriverManager.getConnection(tConnectUrl)) {
+            tConnection.createStatement().execute(level3ViewCreateSQL);
+        }
+
+
+            // Define the test data.
+        final List<String> outerCol4s = Lists.newArrayList();
+        DataSupplier dataSupplier = new DataSupplier() {
+
+            @Override public List<Object> getValues(int rowIndex) {
+                Random rnd = new Random();
+                String id = String.format("00A0y000%07d", rowIndex);
+                String zid = String.format("00B0y000%07d", rowIndex);
+                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+
+                // Store the col4 data to be used later in a where clause
+                outerCol4s.add(col4);
+                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+
+                return Lists
+                        .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
+            }
+        };
+
+        // Create a test data reader/writer for the above schema.
+        DataWriter dataWriter = new BasicDataWriter();
+        DataReader dataReader = new BasicDataReader();
+
+        List<String>
+                columns =
+                Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
+        List<String>
+                nonCoveredColumns =
+                Lists.newArrayList("ID", "ZID", "COL5", "COL7", "COL8", "COL9");
+        List<String> rowKeyColumns = Lists.newArrayList("COL6");
+        String
+                tenantConnectUrl =
+                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions()
+                        .getTenantId();
+        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            writeConnection.setAutoCommit(true);
+            dataWriter.setConnection(writeConnection);
+            dataWriter.setDataSupplier(dataSupplier);
+            dataWriter.setUpsertColumns(columns);
+            dataWriter.setRowKeyColumns(rowKeyColumns);
+            dataWriter.setTargetEntity(level3ViewName);
+
+            // Upsert data for validation
+            upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+            dataReader.setValidationColumns(rowKeyColumns);
+            dataReader.setRowKeyColumns(rowKeyColumns);
+            dataReader.setDML(String.format("SELECT col6 from %s where col4 = '%s'",
+                    level3ViewName, outerCol4s.get(1)));
+            dataReader.setTargetEntity(level3ViewName);
+
+            // Validate data before and after ttl expiration.
+            validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
+
+            // Now update the above data but not modifying the covered columns.
+            // Ensure/validate that empty columns for the index are still updated.
+
+            // Data supplier where covered and included (col4 and col6) columns are not updated.
+            DataSupplier dataSupplierForNonCoveredColumns = new DataSupplier() {
+
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String id = String.format("00A0y000%07d", rowIndex);
+                    String zid = String.format("00B0y000%07d", rowIndex);
+                    String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    return Lists.newArrayList(new Object[] { id, zid, col5, col7, col8, col9 });
+                }
+            };
+
+            // Upsert data for validation with non covered columns
+            dataWriter.setDataSupplier(dataSupplierForNonCoveredColumns);
+            dataWriter.setUpsertColumns(nonCoveredColumns);
+            upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+            List<String> rowKeyColumns1 = Lists.newArrayList("ID", "COL6");
+            dataReader.setValidationColumns(rowKeyColumns1);
+            dataReader.setRowKeyColumns(rowKeyColumns1);
+            dataReader.setDML(String.format("SELECT id, col6 from %s where col4 = '%s'",
+                    level3ViewName, outerCol4s.get(1)));
 
             // Validate data before and after ttl expiration.
             validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
