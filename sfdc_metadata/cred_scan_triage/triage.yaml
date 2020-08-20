@@ -1,0 +1,7 @@
+clean: true
+mock_secret: []
+false_positive:
+- id: phoenix://phoenix-core/src/main/java/org/apache/phoenix/query/QueryServicesOptions.java_d2591b7213e5291f962332f7cb3ab1ed8241512f
+  justification: Used as key for identifying password but not the actual password.
+non_production_secret: []
+production_secret: []
