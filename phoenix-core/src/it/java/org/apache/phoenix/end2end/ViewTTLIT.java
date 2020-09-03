@@ -1602,7 +1602,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private com.google.common.collect.Table<String, String, Object> upsertData(
             DataWriter dataWriter, int numRowsToUpsert) throws SQLException {
         // Upsert rows
-        dataWriter.upsertRows(numRowsToUpsert);
+        dataWriter.upsertRows(1, numRowsToUpsert);
         return dataWriter.getDataTable();
     }
 

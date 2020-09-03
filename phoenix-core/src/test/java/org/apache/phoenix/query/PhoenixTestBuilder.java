@@ -38,6 +38,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -193,7 +194,7 @@ public class PhoenixTestBuilder {
     // Test Data supplier interface for test writers to provide custom data.
     public interface DataSupplier {
         // return the values to be used for upserting data into the underlying entity.
-        List<Object> getValues(int rowIndex);
+        List<Object> getValues(int rowIndex) throws Exception;
     }
 
     // A Data Reader to be used in tests to read test data from test db.
@@ -272,7 +273,7 @@ public class PhoenixTestBuilder {
         List<Object> upsertRow(int rowIndex) throws SQLException;
 
         // template method to upsert a batch of rows using the above info.
-        void upsertRows(int numRows) throws SQLException;
+        void upsertRows(int startRowIndex, int numRows) throws SQLException;
 
         // Get the data that was written as a Table
         Table<String, String, Object> getDataTable();
@@ -397,15 +398,21 @@ public class PhoenixTestBuilder {
             List<String> upsertColumns = Lists.newArrayList();
             List<Object> upsertValues = Lists.newArrayList();
 
+            List<Object> rowValues = null;
+            try {
+                rowValues = getTestDataSupplier().getValues(rowIndex);
+            } catch (Exception e) {
+                throw new SQLException(e);
+            }
+
             if (getColumnPositionsToUpdate().isEmpty()) {
                 upsertColumns.addAll(getUpsertColumns());
-                upsertValues.addAll(getTestDataSupplier().getValues(rowIndex));
+                upsertValues.addAll(rowValues);
             } else {
-                List<String> tmpColumns = getUpsertColumns();
-                List<Object> tmpValues = getTestDataSupplier().getValues(rowIndex);
+                List<String> columnsToUpdate = getUpsertColumns();
                 for (int i : getColumnPositionsToUpdate()) {
-                    upsertColumns.add(tmpColumns.get(i));
-                    upsertValues.add(tmpValues.get(i));
+                    upsertColumns.add(columnsToUpdate.get(i));
+                    upsertValues.add(rowValues.get(i));
                 }
             }
             StringBuilder buf = new StringBuilder("UPSERT INTO ");
@@ -416,11 +423,12 @@ public class PhoenixTestBuilder {
                 buf.append("?,");
             }
             buf.setCharAt(buf.length() - 1, ')');
-            LOGGER.info(buf.toString());
+            LOGGER.debug(buf.toString());
 
             Connection connection = getConnection();
             try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
                 for (int i = 0; i < upsertValues.size(); i++) {
+                    //TODO : handle null values
                     stmt.setObject(i + 1, upsertValues.get(i));
                 }
                 stmt.execute();
@@ -430,7 +438,7 @@ public class PhoenixTestBuilder {
         }
 
         // Upsert batch of rows.
-        public void upsertRows(int numRows) throws SQLException {
+        public void upsertRows(int startRowIndex, int numRows) throws SQLException {
             dataTable.clear();
             List<String> upsertColumns = Lists.newArrayList();
             List<Integer> rowKeyPositions = Lists.newArrayList();
@@ -460,34 +468,45 @@ public class PhoenixTestBuilder {
                 }
             }
             buf.setCharAt(buf.length() - 1, ')');
-            LOGGER.info(buf.toString());
+            LOGGER.debug (buf.toString());
 
             Connection connection = getConnection();
             try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
 
-                for (int r = 1; r <= numRows; r++) {
+                for (int r = startRowIndex; r < startRowIndex + numRows; r++) {
                     List<Object> upsertValues = Lists.newArrayList();
+                    List<Object> rowValues = null;
+                    try {
+                        rowValues = getTestDataSupplier().getValues(r);
+                    } catch (Exception e) {
+                        throw new SQLException(e);
+                    }
                     if (isFullRowUpdate) {
-                        upsertValues.addAll(getTestDataSupplier().getValues(r));
+                        upsertValues.addAll(rowValues);
                     } else {
-                        List<Object> tmpValues = getTestDataSupplier().getValues(r);
                         for (int c : getColumnPositionsToUpdate()) {
-                            upsertValues.add(tmpValues.get(c));
+                            upsertValues.add(rowValues.get(c));
                         }
                     }
 
                     List<String> rowKeyParts = Lists.newArrayList();
                     for (int position : rowKeyPositions) {
-                        rowKeyParts.add(upsertValues.get(position).toString());
+                        if (upsertValues.get(position) != null) {
+                            rowKeyParts.add(upsertValues.get(position).toString());
+                        }
                     }
                     String rowKey = Joiner.on("-").join(rowKeyParts);
 
                     for (int v = 0; v < upsertValues.size(); v++) {
+                        //TODO : handle null values
                         stmt.setObject(v + 1, upsertValues.get(v));
-                        dataTable.put(rowKey,upsertColumns.get(v), upsertValues.get(v));
+                        if (upsertValues.get(v) != null) {
+                            dataTable.put(rowKey,upsertColumns.get(v), upsertValues.get(v));
+                        }
                     }
-                    stmt.execute();
+                    stmt.addBatch();
                 }
+                stmt.executeBatch();
                 connection.commit();
             }
         }
@@ -502,7 +521,6 @@ public class PhoenixTestBuilder {
         Connection connection;
         String targetEntity;
         List<String> rowKeyColumns;
-
 
         @Override public List<String> getUpsertColumns() {
             return upsertColumns;
@@ -552,6 +570,7 @@ public class PhoenixTestBuilder {
         @Override public void setDataSupplier(DataSupplier dataSupplier) {
             this.dataSupplier = dataSupplier;
         }
+
     }
 
     /**
@@ -595,7 +614,9 @@ public class PhoenixTestBuilder {
         public static String DEFAULT_TENANT_VIEW_INDEX_PROPS = "";
         public static String DEFAULT_KP = "ECZ";
         public static String DEFAULT_SCHEMA_NAME = "TEST_ENTITY";
-        public static String DEFAULT_TENANT_ID_FMT = "00D0t%03d%s";
+        public static String DEFAULT_TENANT_ID_FMT = "00D0t%04d%s";
+        public static String DEFAULT_UNIQUE_TABLE_NAME_FMT = "T_%s_%s";
+        public static String DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT = "GV_%s_%s";
 
         public static String DEFAULT_CONNECT_URL = "jdbc:phoenix:localhost";
 
@@ -765,12 +786,12 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE TABLE IF NOT EXISTS " +
-		// tableName +
-		// "(" +
-		// 		dataColumns +
-		// 		" CONSTRAINT pk PRIMARY KEY (" + pk + ")
-		// 	)  " +
-		// 	(dataProps.isEmpty() ? "" : dataProps;
+        // tableName +
+        // "(" +
+        // 		dataColumns +
+        // 		" CONSTRAINT pk PRIMARY KEY (" + pk + ")
+        // 	)  " +
+        // 	(dataProps.isEmpty() ? "" : dataProps;
         public SchemaBuilder withTableDefaults() {
             tableEnabled = true;
             tableCreated = false;
@@ -779,11 +800,11 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE TABLE IF NOT EXISTS " +
-		// tableName +
-		// "(" +
-		// 		dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + ")
-		// 	)  " +
-		// 	(dataProps.isEmpty() ? "" : dataProps;
+        // tableName +
+        // "(" +
+        // 		dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + ")
+        // 	)  " +
+        // 	(dataProps.isEmpty() ? "" : dataProps;
         public SchemaBuilder withTableOptions(TableOptions options) {
             tableEnabled = true;
             tableCreated = false;
@@ -792,8 +813,8 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW IF NOT EXISTS " +
-		// globalViewName +
-		// AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
+        // globalViewName +
+        // AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
         public SchemaBuilder withSimpleGlobalView() {
             globalViewEnabled = true;
             globalViewCreated = false;
@@ -802,10 +823,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW IF NOT EXISTS " +
-		// globalViewName +
-		// "(" +
-		// 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
-		// 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
+        // globalViewName +
+        // "(" +
+        // 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
+        // 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
         public SchemaBuilder withGlobalViewDefaults() {
             globalViewEnabled = true;
             globalViewCreated = false;
@@ -814,10 +835,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW IF NOT EXISTS " +
-		// globalViewName +
-		// "(" +
-		// 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
-		// 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
+        // globalViewName +
+        // "(" +
+        // 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
+        // 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
         public SchemaBuilder withGlobalViewOptions(GlobalViewOptions options) {
             globalViewEnabled = true;
             globalViewCreated = false;
@@ -834,10 +855,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW  IF NOT EXISTS " +
-		// tenantViewName +
-		// "(" +
-		// 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
-		// 	) AS SELECT * FROM " + globalViewName;
+        // tenantViewName +
+        // "(" +
+        // 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
+        // 	) AS SELECT * FROM " + globalViewName;
         public SchemaBuilder withTenantViewDefaults() {
             tenantViewEnabled = true;
             tenantViewCreated = false;
@@ -846,10 +867,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW  IF NOT EXISTS " +
-		// tenantViewName +
-		// "(" +
-		// 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
-		// 	) AS SELECT * FROM " + globalViewName;
+        // tenantViewName +
+        // "(" +
+        // 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
+        // 	) AS SELECT * FROM " + globalViewName;
         public SchemaBuilder withTenantViewOptions(TenantViewOptions options) {
             tenantViewEnabled = true;
             tenantViewCreated = false;
@@ -858,8 +879,8 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE INDEX IF NOT EXISTS
-		// "IDX_T_T000001"
-		// ON "TEST_ENTITY"."T_T000001"(COL1) INCLUDE (COL3)"
+        // "IDX_T_T000001"
+        // ON "TEST_ENTITY"."T_T000001"(COL1) INCLUDE (COL3)"
         public SchemaBuilder withTableIndexDefaults() {
             tableIndexEnabled = true;
             tableIndexCreated = false;
@@ -933,9 +954,9 @@ public class PhoenixTestBuilder {
         }
 
         // Build method for creating new tenants with existing table,
-		// global and tenant view definitions.
+        // global and tenant view definitions.
         // If the tenant view definition is not changed then
-		// the same view is created with different names for different tenants.
+        // the same view is created with different names for different tenants.
         public void buildWithNewTenant() throws Exception {
             tenantViewCreated = false;
             tenantViewIndexCreated = false;
@@ -950,9 +971,9 @@ public class PhoenixTestBuilder {
         }
 
         // Build method for creating new tenant views with existing table,
-		// global and tenant view definitions.
+        // global and tenant view definitions.
         // If the tenant view definition is not changed then
-		// the same view is created with different names.
+        // the same view is created with different names.
         public void buildNewView() throws Exception {
             tenantViewCreated = false;
             tenantViewIndexCreated = false;
@@ -979,32 +1000,60 @@ public class PhoenixTestBuilder {
                 this.connectOptions = new ConnectOptions();
             }
 
+            if (this.globalViewOptions == null) {
+                this.globalViewOptions = new GlobalViewOptions();
+            }
+
+            if (this.globalViewIndexOptions == null) {
+                this.globalViewIndexOptions = new GlobalViewIndexOptions();
+            }
+
+            if (this.tenantViewOptions == null) {
+                this.tenantViewOptions = new TenantViewOptions();
+            }
+
+            if (this.tenantViewIndexOptions == null) {
+                this.tenantViewIndexOptions = new TenantViewIndexOptions();
+            }
+
             if (connectOptions.useGlobalConnectionOnly
                     && connectOptions.useTenantConnectionForGlobalView) {
                 throw new IllegalArgumentException(
-                		"useTenantConnectionForGlobalView and useGlobalConnectionOnly both cannot be true");
+                        "useTenantConnectionForGlobalView and useGlobalConnectionOnly both cannot be true");
             }
 
-            String tableName = SchemaUtil.normalizeIdentifier("T_" + dataOptions.uniqueName);
-            String globalViewName = SchemaUtil.normalizeIdentifier("V_" + dataOptions.uniqueName);
+            String tableName = SchemaUtil.normalizeIdentifier(dataOptions.getTableName());
+            String globalViewName = SchemaUtil.normalizeIdentifier(dataOptions.getGlobalViewName());
+            String tableSchemaNameToUse = tableOptions.getSchemaName();
+            String globalViewSchemaNameToUse = globalViewOptions.getSchemaName();
+            String tenantViewSchemaNameToUse = tenantViewOptions.getSchemaName();
+
+            // If schema name is overridden by specifying it in data options then use it.
+            if ((dataOptions.getSchemaName() != null) && (!dataOptions.getSchemaName().isEmpty())) {
+                tableSchemaNameToUse = dataOptions.getSchemaName();
+                globalViewSchemaNameToUse = dataOptions.getSchemaName();
+                tenantViewSchemaNameToUse = dataOptions.getSchemaName();
+            }
+
             String
                     tableSchemaName =
-                    tableEnabled ? SchemaUtil.normalizeIdentifier(tableOptions.schemaName) : "";
+                    tableEnabled ? SchemaUtil.normalizeIdentifier(tableSchemaNameToUse) : "";
             String
                     globalViewSchemaName =
                     globalViewEnabled ?
-                            SchemaUtil.normalizeIdentifier(globalViewOptions.schemaName) :
+                            SchemaUtil.normalizeIdentifier(globalViewSchemaNameToUse) :
                             "";
             String
                     tenantViewSchemaName =
                     tenantViewEnabled ?
-                            SchemaUtil.normalizeIdentifier(tenantViewOptions.schemaName) :
+                            SchemaUtil.normalizeIdentifier(tenantViewSchemaNameToUse) :
                             "";
             entityTableName = SchemaUtil.getTableName(tableSchemaName, tableName);
             entityGlobalViewName = SchemaUtil.getTableName(globalViewSchemaName, globalViewName);
 
             // Derive the keyPrefix to use.
-            entityKeyPrefix =
+            entityKeyPrefix = dataOptions.getKeyPrefix() != null && !dataOptions.getKeyPrefix().isEmpty()?
+                    dataOptions.getKeyPrefix() :
                     connectOptions.useGlobalConnectionOnly ?
                             (String.format("Z%02d", dataOptions.getViewNumber())) :
                             (tenantViewEnabled && !globalViewEnabled ?
@@ -1106,15 +1155,15 @@ public class PhoenixTestBuilder {
             statement.append(isLocal ?
                     "CREATE LOCAL INDEX IF NOT EXISTS " :
                     "CREATE INDEX IF NOT EXISTS ")
-					.append(indexName)
-					.append(" ON ")
+                    .append(indexName)
+                    .append(" ON ")
                     .append(onEntityName)
-					.append("(")
-					.append(Joiner.on(",").join(indexColumns))
+                    .append("(")
+                    .append(Joiner.on(",").join(indexColumns))
                     .append(") ")
-					.append(includeColumns.isEmpty() ?
-						"" :
-						"INCLUDE (" + Joiner.on(",").join(includeColumns) + ") ")
+                    .append(includeColumns.isEmpty() ?
+                            "" :
+                            "INCLUDE (" + Joiner.on(",").join(includeColumns) + ") ")
                     .append((indexProps.isEmpty() ? "" : indexProps));
 
             LOGGER.info(statement.toString());
@@ -1793,10 +1842,15 @@ public class PhoenixTestBuilder {
 
         public static class DataOptions {
             String uniqueName = "";
+            String uniqueNamePrefix = "";
             String tenantIdFormat = DDLDefaults.DEFAULT_TENANT_ID_FMT;
+            String keyPrefix = "";
             int viewNumber = 0;
             AtomicInteger viewCounter = new AtomicInteger(0);
             String tenantId = "";
+            String schemaName = DDLDefaults.DEFAULT_SCHEMA_NAME;
+            String tableName = "";
+            String globalViewName = "";
 
             /*
              *****************************
@@ -1806,10 +1860,18 @@ public class PhoenixTestBuilder {
 
             public static DataOptions withDefaults() {
                 DataOptions options = new DataOptions();
-                options.uniqueName = generateUniqueName();
+                options.uniqueName = generateUniqueName().substring(1);
                 options.viewCounter = new AtomicInteger(0);
                 options.tenantId =
                         String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
+                                options.uniqueName);
+                options.tableName =
+                        String.format("%s%s",
+                                options.uniqueNamePrefix.isEmpty() ? "T_" : options.uniqueNamePrefix,
+                                options.uniqueName);
+                options.globalViewName =
+                        String.format("%s%s",
+                                options.uniqueNamePrefix.isEmpty() ? "GV_" : options.uniqueNamePrefix,
                                 options.uniqueName);
                 return options;
             }
@@ -1844,6 +1906,58 @@ public class PhoenixTestBuilder {
 
             public void setTenantId(String tenantId) {
                 this.tenantId = tenantId;
+            }
+
+            public String getUniqueNamePrefix() {
+                return uniqueNamePrefix;
+            }
+
+            public void setUniqueNamePrefix(String uniqueNamePrefix) {
+                this.uniqueNamePrefix = uniqueNamePrefix;
+            }
+
+            public String getKeyPrefix() {
+                return keyPrefix;
+            }
+
+            public void setKeyPrefix(String keyPrefix) {
+                this.keyPrefix = keyPrefix;
+            }
+
+            public void setViewNumber(int viewNumber) {
+                this.viewNumber = viewNumber;
+            }
+
+            public AtomicInteger getViewCounter() {
+                return viewCounter;
+            }
+
+            public void setViewCounter(AtomicInteger viewCounter) {
+                this.viewCounter = viewCounter;
+            }
+
+            public String getTableName() {
+                return tableName;
+            }
+
+            public void setTableName(String tableName) {
+                this.tableName = tableName;
+            }
+
+            public String getGlobalViewName() {
+                return globalViewName;
+            }
+
+            public void setGlobalViewName(String globalViewName) {
+                this.globalViewName = globalViewName;
+            }
+
+            public String getSchemaName() {
+                return schemaName;
+            }
+
+            public void setSchemaName(String schemaName) {
+                this.schemaName = schemaName;
             }
         }
     }
