@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.PhoenixTestBuilder;
@@ -50,8 +51,10 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -1266,7 +1269,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
 
         for (String additionalProps : Lists
-                .newArrayList("COLUMN_ENCODED_BYTES=0", "DEFAULT_COLUMN_FAMILY='Z'")) {
+                .newArrayList("COLUMN_ENCODED_BYTES=0", "DEFAULT_COLUMN_FAMILY='0'")) {
 
             StringBuilder withTableProps = new StringBuilder();
             withTableProps.append("MULTI_TENANT=true,").append(additionalProps);
@@ -1351,7 +1354,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     // Verify after deleting TTL expired data.
                     // Query with masking disabled to ensure the data is deleted.
                     Properties props = new Properties();
-                    props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
+                    props.setProperty(QueryServices.PHOENIX_TTL_CLIENT_SIDE_MASKING_ENABLED, "false");
 
                     try (Connection readConnection = DriverManager
                             .getConnection(tenantConnectUrl, props)) {
@@ -1590,7 +1593,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
         // Query with masking disabled to ensure the data is deleted.
-        props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
+        props.setProperty(QueryServices.PHOENIX_TTL_CLIENT_SIDE_MASKING_ENABLED, "false");
 
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
@@ -1770,7 +1773,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         String viewName = schemaBuilder.getEntityTenantViewName();
 
         Properties props = new Properties();
-        props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
+        props.setProperty(QueryServices.PHOENIX_TTL_CLIENT_SIDE_MASKING_ENABLED, "false");
         // Wait atleast phoenixTTL, setting the scn does not work.
         TimeUnit.MILLISECONDS.sleep(2 * phoenixTTL);
 
@@ -1791,9 +1794,11 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                             phoenixTTL));
             Preconditions.checkNotNull(deleteIfExpiredStatement);
 
+            boolean isServerSideMaskingEnabled = ScanUtil.isServerSideMaskingEnabled(deleteConnection.unwrap(PhoenixConnection.class));
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             int deleteCount = pstmt.executeUpdate(deleteIfExpiredStatement);
-            assertEquals("Rows deleted do not match", expectedDeleteCount, deleteCount);
+            assertEquals("Rows deleted do not match",
+                    isServerSideMaskingEnabled ? 0 : expectedDeleteCount, deleteCount);
 
         }
     }
