@@ -50,6 +50,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndex
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -150,7 +151,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     @Test
     public void testWithBasicGlobalViewWithNoPhoenixTTLDefined() throws Exception {
 
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -219,7 +220,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenixTTLForLevelOneView() throws Exception {
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -253,7 +254,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenixTTLForLevelTwoView() throws Exception {
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -300,7 +301,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, indexOnTenantViewName, PTableType.INDEX.getSerializedValue(), 1000);
 
         // Without override
-        startTime = System.currentTimeMillis();
+        startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewWithoutOverrideOptions = TenantViewOptions.withDefaults();
         schemaBuilder
@@ -331,7 +332,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenixTTLForWhenTTLIsZero() throws Exception {
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -367,7 +368,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenixTTLWithAlterView() throws Exception {
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -416,7 +417,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     @Test public void testViewTTLForLevelTwoViewWithNoIndexes() throws Exception {
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -464,7 +465,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 PTableType.VIEW.getSerializedValue(), 10000);
 
         // Without override
-        startTime = System.currentTimeMillis();
+        startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewWithoutOverrideOptions = TenantViewOptions.withDefaults();
         schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
@@ -1084,7 +1085,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     @Test public void testWithTenantViewAndGlobalViewAndVariousOptions() throws Exception {
-        long phoenixTTL = 100;
+        // Increased it to 500 to reduce flappiness.
+        long phoenixTTL = 500;
 
         // Define the test schema
         TableOptions tableOptions = TableOptions.withDefaults();
@@ -1112,7 +1114,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
 
         for (String additionalProps : Lists
-                .newArrayList("COLUMN_ENCODED_BYTES=0", "DEFAULT_COLUMN_FAMILY='0'")) {
+                .newArrayList("COLUMN_ENCODED_BYTES=0", "DEFAULT_COLUMN_FAMILY='Z'")) {
 
             StringBuilder withTableProps = new StringBuilder();
             withTableProps.append("MULTI_TENANT=true,").append(additionalProps);
@@ -1191,17 +1193,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                                 dataReader, schemaBuilder);
                     }
 
-                    // Wait atleast phoenixTTL
-                    TimeUnit.MILLISECONDS.sleep(2 * phoenixTTL);
-                    // Set the scn to now + ttl to simulate expiration
-                    long scnTimestamp = System.currentTimeMillis() + phoenixTTL;
                     // Delete data by simulating expiration.
                     deleteData(schemaBuilder, phoenixTTL, DEFAULT_NUM_ROWS);
 
                     // Verify after deleting TTL expired data.
                     // Query with masking disabled to ensure the data is deleted.
                     Properties props = new Properties();
-                    props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
                     props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
 
                     try (Connection readConnection = DriverManager
@@ -1368,7 +1365,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
 
             // Validate data exists before ttl expiration.
-            long probeTimestamp = System.currentTimeMillis() + globalPhoenixTTL / 2;
+            long probeTimestamp = EnvironmentEdgeManager.currentTimeMillis() + globalPhoenixTTL / 2;
             validateRowsAreNotMaskedUsingCounts(probeTimestamp, dataReader, schemaBuilder);
             // Validate data before and after ttl expiration.
             // Use the global phoenix ttl since that is what the view has inherited.
@@ -1433,13 +1430,11 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     schemaBuilder);
         }
 
-        // Wait atleast phoenixTTL
-        TimeUnit.MILLISECONDS.sleep(2 * phoenixTTL);
         // Delete expired rows.
         deleteData(schemaBuilder, phoenixTTL, DEFAULT_NUM_ROWS);
 
         // Verify after deleting TTL expired data.
-        long scnTimestamp = System.currentTimeMillis() + phoenixTTL;
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + phoenixTTL;
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
         // Query with masking disabled to ensure the data is deleted.
@@ -1489,7 +1484,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
 
         // Verify after TTL expiration
-        long scnTimestamp = System.currentTimeMillis();
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp + (2 * phoenixTTL)));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
@@ -1513,7 +1508,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         .getTenantId();
 
         // Verify before TTL expiration
-        try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        Properties props = new Properties();
+        props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
+        try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
             com.google.common.collect.Table<String, String, Object>
@@ -1526,8 +1524,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
 
         // Verify after TTL expiration
-        long scnTimestamp = System.currentTimeMillis();
-        Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp + (2 * phoenixTTL)));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
@@ -1550,7 +1546,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         .getTenantId();
 
         // Verify rows exists (not masked) at current time
-        try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        Properties props = new Properties();
+        props.setProperty("CurrentSCN", Long.toString(scnTimestamp ));
+        try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
             com.google.common.collect.Table<String, String, Object>
@@ -1562,7 +1561,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
 
         // Verify rows exists (not masked) at probed timestamp
-        Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(probeTimestamp));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
@@ -1584,7 +1582,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         Set<String> fetchedRowKeys = fetchedData.rowKeySet();
         assertTrue("Upserted row keys should not be null", upsertedRowKeys != null);
         assertTrue("Fetched row keys should not be null", fetchedRowKeys != null);
-        assertTrue("Rows upserted and fetched do not match",
+        assertTrue(String.format("Rows upserted and fetched do not match, upserted=%d, fetched=%d",
+                upsertedRowKeys.size(), fetchedRowKeys.size()),
                 upsertedRowKeys.equals(fetchedRowKeys));
 
         Set<String> fetchedCols = fetchedData.columnKeySet();
@@ -1614,12 +1613,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         return dataReader.getDataTable();
     }
 
-    private void deleteData(SchemaBuilder schemaBuilder, long phoenixTTL, int expectedDeleteCount) throws SQLException {
+    private void deleteData(SchemaBuilder schemaBuilder, long phoenixTTL, int expectedDeleteCount) throws Exception {
 
         String viewName = schemaBuilder.getEntityTenantViewName();
 
         Properties props = new Properties();
         props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
+        // Wait atleast phoenixTTL, setting the scn does not work.
+        TimeUnit.MILLISECONDS.sleep(2 * phoenixTTL);
 
         String
                 tenantConnectUrl =
