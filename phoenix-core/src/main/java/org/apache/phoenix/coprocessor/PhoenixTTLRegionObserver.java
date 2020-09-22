@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Delete;
@@ -35,6 +36,8 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixTTLSource;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -51,13 +54,23 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
  * Coprocessor that checks whether the row is expired based on the TTL spec.
  *
  */
-public class TTLAwareRegionObserver extends BaseRegionObserver {
-    private static final Log LOG = LogFactory.getLog(TTLAwareRegionObserver.class);
+public class PhoenixTTLRegionObserver extends BaseRegionObserver {
+    private static final Log LOG = LogFactory.getLog(PhoenixTTLRegionObserver.class);
+    private MetricsPhoenixTTLSource metricSource;
+
+    @Override public void start(CoprocessorEnvironment e) throws IOException {
+        super.start(e);
+        metricSource = MetricsPhoenixCoprocessorSourceFactory.getInstance().getPhoenixTTLSource();
+    }
+
+    @Override public void stop(CoprocessorEnvironment e) throws IOException {
+        super.stop(e);
+    }
 
     /**
      * A region scanner that checks the TTL expiration of rows
      */
-    private static class TTLAwareRegionScanner implements RegionScanner {
+    private static class PhoenixTTLRegionScanner implements RegionScanner {
         RegionScanner scanner;
         private Scan scan;
         private byte[] emptyCF;
@@ -69,7 +82,7 @@ public class TTLAwareRegionObserver extends BaseRegionObserver {
         private boolean deleteIfExpired;
         private boolean maskIfExpired;
 
-        public TTLAwareRegionScanner(RegionCoprocessorEnvironment env,
+        public PhoenixTTLRegionScanner(RegionCoprocessorEnvironment env,
                                   Scan scan,
                                   RegionScanner scanner) throws IOException {
             this.scan = scan;
@@ -305,8 +318,6 @@ public class TTLAwareRegionObserver extends BaseRegionObserver {
         }
     }
 
-
-
     @Override
     public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
                                          Scan scan, RegionScanner s) throws IOException {
@@ -315,11 +326,20 @@ public class TTLAwareRegionObserver extends BaseRegionObserver {
             return s;
         }
 
-        LOG.debug(String.format(
-                "********** PHOENIX-TTL: TTLAwareRegionObserver::postScannerOpen TTL for table = [%s], scan = [%s], PHOENIX_TTL = %d ***************",
+        if (ScanUtil.isMaskTTLExpiredRows(scan)) {
+            metricSource.incrementMaskExpiredRequestCount();
+        }
+
+        if (ScanUtil.isDeleteTTLExpiredRows(scan)) {
+            metricSource.incrementDeleteExpiredRequestCount();
+        }
+
+        LOG.info(String.format(
+                "********** PHOENIX-TTL: PhoenixTTLRegionObserver::postScannerOpen TTL for table = [%s], scan = [%s], PHOENIX_TTL = %d ***************, numRequests=%d",
                 s.getRegionInfo().getTable().getNameAsString(),
                 scan.toJSON(Integer.MAX_VALUE),
-                ScanUtil.getPhoenixTTL(scan)));
-        return new TTLAwareRegionScanner(c.getEnvironment(), scan, s);
+                ScanUtil.getPhoenixTTL(scan),
+                metricSource.getMaskExpiredRequestCount()));
+        return new PhoenixTTLRegionScanner(c.getEnvironment(), scan, s);
     }
 }
