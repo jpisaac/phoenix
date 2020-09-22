@@ -18,21 +18,27 @@
 
 package org.apache.phoenix.pherf.util;
 
-import org.apache.phoenix.mapreduce.index.IndexTool;
+import com.google.gson.Gson;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.configuration.*;
-import org.apache.phoenix.pherf.jmx.MonitorManager;
-import org.apache.phoenix.pherf.result.DataLoadThreadTime;
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.apache.phoenix.pherf.configuration.Ddl;
+import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
 import org.apache.phoenix.pherf.rules.RulesApplier;
-import org.apache.phoenix.pherf.util.GoogleChartGenerator.Node;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -45,6 +51,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
 public class PhoenixUtil {
+    public static final String ASYNC_KEYWORD = "ASYNC";
+    public static final Gson GSON = new Gson();
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixUtil.class);
     private static String zookeeper;
     private static int rowCountOverride = 0;
@@ -52,7 +60,6 @@ public class PhoenixUtil {
     private static PhoenixUtil instance;
     private static boolean useThinDriver;
     private static String queryServerUrl;
-    private static final String ASYNC_KEYWORD = "ASYNC";
     private static final int ONE_MIN_IN_MS = 60000;
     private static String CurrentSCN = null;
 
@@ -84,6 +91,10 @@ public class PhoenixUtil {
 
     public static boolean isThinDriver() {
         return PhoenixUtil.useThinDriver;
+    }
+
+    public static Gson getGSON() {
+        return GSON;
     }
 
     public Connection getConnection() throws Exception {
@@ -267,6 +278,7 @@ public class PhoenixUtil {
                 column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME").replace(" ", "_")));
                 column.setLength(resultSet.getInt("COLUMN_SIZE"));
                 columnList.add(column);
+                LOGGER.info(String.format("getColumnsMetaData for column name : %s", column.getName()));
             }
         } finally {
             if (null != resultSet) {
@@ -335,7 +347,7 @@ public class PhoenixUtil {
      * @param tableName
      * @throws InterruptedException
      */
-    private void waitForAsyncIndexToFinish(String tableName) throws InterruptedException {
+    public void waitForAsyncIndexToFinish(String tableName) throws InterruptedException {
     	//Wait for up to 15 mins for ASYNC index build to start
     	boolean jobStarted = false;
     	for (int i=0; i<15; i++) {

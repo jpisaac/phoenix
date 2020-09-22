@@ -74,7 +74,8 @@ public class ResourceList {
     private Collection<Path> getResourcesPaths(
             final Pattern pattern) throws Exception {
 
-        final String classPath = System.getProperty("java.class.path", ".");
+        //final String classPath = System.getProperty("java.class.path", ".");
+        final String classPath = ".";
         final String[] classPathElements = classPath.split(":");
         List<String> strResources = new ArrayList<>();
         Collection<Path> paths = new ArrayList<>();
@@ -112,6 +113,7 @@ public class ResourceList {
             paths.add(path);
         }
 
+        Collections.sort((List<Path>)paths);
         return paths;
     }
 
