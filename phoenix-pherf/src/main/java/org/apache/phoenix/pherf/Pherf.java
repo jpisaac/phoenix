@@ -24,8 +24,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;

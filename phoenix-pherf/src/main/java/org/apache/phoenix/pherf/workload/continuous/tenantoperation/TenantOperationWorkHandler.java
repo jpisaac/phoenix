@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.pherf.workload.continuous.tenantoperation;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -43,19 +43,12 @@ import java.util.List;
 public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEvent>,
         LifecycleAware {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationWorkHandler.class);
-    private static volatile CSVFileResultHandler resultFileHandler;
     private final PhoenixUtil pUtil;
-    private final List<OperationStats> handlerStats;
     private final String handlerId;
     private final DataModel dataModel;
     private final Scenario scenario;
     private final TenantOperationFactory tenantOperationFactory;
 
-    static {
-        resultFileHandler = new CSVFileResultHandler();
-        resultFileHandler.setResultFileDetails(ResultFileDetails.CSV);
-        resultFileHandler.setResultFileName("STATS_" + System.currentTimeMillis());
-    }
 
     public TenantOperationWorkHandler(PhoenixUtil pUtil, DataModel dataModel, Scenario scenario, String handlerId) {
         this.handlerId = handlerId;
@@ -63,7 +56,6 @@ public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEv
         this.dataModel = dataModel;
         this.scenario = scenario;
         this.tenantOperationFactory = new TenantOperationFactory(pUtil, dataModel, scenario);
-        this.handlerStats = Lists.newArrayList();
     }
 
     @Override public void onEvent(TenantOperationEvent event)
@@ -72,7 +64,7 @@ public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEv
         TenantOperationInfo input = event.getTenantOperationInfo();
         TenantOperationImpl op = tenantOperationFactory.getOperation(input);
         OperationStats stats = op.getMethod().apply(input);
-        handlerStats.add(stats);
+        stats.setHandlerId(handlerId);
         LOGGER.info(pUtil.getGSON().toJson(stats));
     }
 
@@ -84,23 +76,5 @@ public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEv
     @Override public void onShutdown() {
         LOGGER.info(String.format("TenantOperationWorkHandler stopped for %s:%s",
                 scenario.getName(), scenario.getTableName()));
-        flushStats();
-    }
-
-    private void flushStats() {
-        try {
-            ResultFileDetails resultFileDetails = resultFileHandler.getResultFileDetails();
-            for (OperationStats stats : handlerStats) {
-                List<ResultValue> statsRow = stats.getCsvRepresentation(handlerId);
-                Result result =
-                        new Result(resultFileDetails,
-                                resultFileDetails.getHeader().toString(),
-                                statsRow);
-                resultFileHandler.write(result);
-            }
-            handlerStats.clear();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 }

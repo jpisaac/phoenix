@@ -18,9 +18,9 @@
 
 package org.apache.phoenix.pherf.workload.continuous.tenantoperation;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Charsets;
 import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.PrimitiveSink;
