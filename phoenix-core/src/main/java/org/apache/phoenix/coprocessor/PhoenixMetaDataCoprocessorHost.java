@@ -32,7 +32,6 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcServer;
-import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -126,10 +125,7 @@ public class PhoenixMetaDataCoprocessorHost
                 int priority, int sequence, Configuration conf) {
             super(env, instance, priority, sequence, conf);
         }
-        @Override
-        public MetricRegistry getMetricRegistryForRegionServer() {
-            return env.getMetricRegistryForRegionServer();
-        }
+
         @Override
         public RegionServerServices getRegionServerServices() {
             return env.getRegionServerServices();

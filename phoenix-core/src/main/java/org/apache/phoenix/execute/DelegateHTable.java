@@ -246,25 +246,6 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     }
 
     @Override
-    public int getReadRpcTimeout() {
-        return delegate.getReadRpcTimeout();
-    }
-
-    @Override
-    public void setReadRpcTimeout(int i) {
-        delegate.setReadRpcTimeout(i);
-    }
-
-    @Override
-    public int getWriteRpcTimeout() {
-        return delegate.getWriteRpcTimeout();
-    }
-
-    @Override
-    public void setWriteRpcTimeout(int i) {delegate.setWriteRpcTimeout(i); }
-
-
-    @Override
     public int getRpcTimeout() {
         return delegate.getRpcTimeout();
     }
