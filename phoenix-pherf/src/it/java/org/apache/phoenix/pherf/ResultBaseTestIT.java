@@ -38,8 +38,8 @@ import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ResultBaseTestIT extends BaseTest {
-    protected static final String matcherScenario = ".*scenario/.*test.*xml";
-    protected static final String matcherSchema = ".*datamodel/.*test.*sql";
+    protected static final String matcherScenario = ".*scenario/.*test_scenario.*xml";
+    protected static final String matcherSchema = ".*datamodel/.*test_schema.*sql";
 
     protected static PhoenixUtil util = PhoenixUtil.create(true);
     protected static Properties properties;

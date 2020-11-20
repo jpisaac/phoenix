@@ -64,15 +64,19 @@
 			<version>3.3.2</version>
 		</dependency>
 		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.4</version>
+		</dependency>
+		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-math3</artifactId>
 			<version>3.3</version>
 		</dependency>
-    <dependency>
-      <groupId>org.apache.phoenix.thirdparty</groupId>
-      <artifactId>phoenix-shaded-commons-cli</artifactId>
-    </dependency>
-
+		<dependency>
+		  <groupId>org.apache.phoenix.thirdparty</groupId>
+		  <artifactId>phoenix-shaded-commons-cli</artifactId>
+		</dependency>
 		<!-- Test Dependencies -->
 		<dependency>
 			<groupId>junit</groupId>
@@ -221,6 +225,8 @@
 								<include>joda-time:joda-time</include>
 								<include>org.apache.commons:commons-csv</include>
 								<include>commons-lang:commons-lang</include>
+								<include>com.google.code.gson:gson</include>
+								<include>com.lmax:disruptor</include>
 							</includes>
 						</artifactSet>
 						<filters>
