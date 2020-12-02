@@ -68,6 +68,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -289,9 +290,11 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
             KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 4);
     }
 
+    @Ignore
     /**
      * Tests getting an index update for a mutation with 200 versions Before, the issue PHOENIX-3807
-     * was causing this test to take >90 seconds, so here we set a timeout of 5 seconds
+     * was causing this test to take >90 seconds, so here we set a timeout of 5 seconds.
+     *
      */
     @Test(timeout = 10000)
     public void testManyVersions() throws IOException {
