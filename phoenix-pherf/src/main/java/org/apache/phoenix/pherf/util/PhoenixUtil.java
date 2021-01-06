@@ -284,7 +284,7 @@ public class PhoenixUtil {
                 column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME").replace(" ", "_")));
                 column.setLength(resultSet.getInt("COLUMN_SIZE"));
                 columnList.add(column);
-                LOGGER.info(String.format("getColumnsMetaData for column name : %s", column.getName()));
+                LOGGER.debug(String.format("getColumnsMetaData for column name : %s", column.getName()));
             }
         } finally {
             if (null != resultSet) {

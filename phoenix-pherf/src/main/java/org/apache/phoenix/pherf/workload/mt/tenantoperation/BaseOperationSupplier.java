@@ -19,15 +19,30 @@
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
 import com.google.common.base.Function;
+import com.google.common.base.Supplier;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.LoadProfile;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 
 /**
- * An interface that implementers can use to provide a function that takes
- * @see {@link TenantOperationInfo} as an input and gives @see {@link OperationStats} as output.
- * This @see {@link Function} will invoked by the
- * @see {@link TenantOperationWorkHandler#onEvent(TenantOperationWorkload.TenantOperationEvent)}
- * when handling the events.
+ * An abstract base class for all OperationSuppliers
  */
-public interface TenantOperationImpl {
-    Function<TenantOperationInfo, OperationStats> getMethod();
+abstract class BaseOperationSupplier implements Supplier<Function<TenantOperationInfo, OperationStats>> {
+
+    final PhoenixUtil phoenixUtil;
+    final DataModel model;
+    final Scenario scenario;
+    final RulesApplier rulesApplier;
+    final LoadProfile loadProfile;
+
+    public BaseOperationSupplier(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
+        this.phoenixUtil = phoenixUtil;
+        this.model = model;
+        this.scenario = scenario;
+        this.rulesApplier = new RulesApplier(model);
+        this.loadProfile = this.scenario.getLoadProfile();
+    }
 }

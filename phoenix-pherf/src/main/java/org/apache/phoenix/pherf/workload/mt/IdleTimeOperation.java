@@ -18,12 +18,12 @@
 
 package org.apache.phoenix.pherf.workload.mt;
 
-import org.apache.phoenix.pherf.configuration.Noop;
+import org.apache.phoenix.pherf.configuration.IdleTime;
 
 /**
  * Defines a no op operation, typically used to simulate idle time.
- * @see {@link OperationType#NO_OP}s
+ * @see {@link OperationType#IDLE_TIME}
  */
-public interface NoopOperation extends Operation {
-    Noop getNoop();
+public interface IdleTimeOperation extends Operation {
+    IdleTime getIdleTime();
 }

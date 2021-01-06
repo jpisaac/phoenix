@@ -131,7 +131,6 @@ public class TenantOperationEventGenerator
     }
 
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationEventGenerator.class);
     private final WeightedRandomSampler sampler;
     private final Properties properties;
 
