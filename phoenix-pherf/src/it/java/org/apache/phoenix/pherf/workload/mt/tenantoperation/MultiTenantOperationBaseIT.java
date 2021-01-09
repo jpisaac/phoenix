@@ -17,25 +17,17 @@
  */
 
 
-
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
-import com.lmax.disruptor.LifecycleAware;
-import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.XMLConfigParserTest;
 import org.apache.phoenix.pherf.configuration.DataModel;
-import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.pherf.workload.Workload;
 import org.junit.BeforeClass;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import javax.xml.bind.UnmarshalException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
