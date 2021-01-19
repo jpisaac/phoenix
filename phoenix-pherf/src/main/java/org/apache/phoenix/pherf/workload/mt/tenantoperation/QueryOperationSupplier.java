@@ -52,12 +52,12 @@ public class QueryOperationSupplier extends BaseOperationSupplier {
             public OperationStats apply(final TenantOperationInfo input) {
 
                 final QueryOperation operation = (QueryOperation) input.getOperation();
+                final Query query = operation.getQuery();
                 final String tenantGroup = input.getTenantGroupId();
                 final String opGroup = input.getOperationGroupId();
-                final String tenantId = input.getTenantId();
+                final String tenantId = query.isUseGlobalConnection() ? null : input.getTenantId();
                 final String scenarioName = input.getScenarioName();
                 final String tableName = input.getTableName();
-                final Query query = operation.getQuery();
 
                 String opName = String.format("%s:%s:%s:%s:%s", scenarioName, tableName,
                         opGroup, tenantGroup, tenantId);

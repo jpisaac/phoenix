@@ -165,7 +165,6 @@ public class RulesApplier {
             // Assume the first rule map
             Map<DataTypeMapping, List> ruleMap = modelList.get(0);
             List<Column> ruleList = ruleMap.get(phxMetaColumn.getType());
-            //LOGGER.info(String.format("Did not found a correct override column rule, %s, %s", phxMetaColumn.getName(), phxMetaColumn.getType()));
 
             // Make sure Column from Phoenix Metadata matches a rule column
             if (ruleList != null && ruleList.contains(phxMetaColumn)) {
