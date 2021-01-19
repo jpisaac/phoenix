@@ -58,10 +58,10 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
                 final int rowCount = useBatchApi ? batchSize : 1;
 
                 final UpsertOperation operation = (UpsertOperation) input.getOperation();
+                final Upsert upsert = operation.getUpsert();
                 final String tenantGroup = input.getTenantGroupId();
                 final String opGroup = input.getOperationGroupId();
-                final String tenantId = input.getTenantId();
-                final Upsert upsert = operation.getUpsert();
+                final String tenantId = upsert.isUseGlobalConnection() ? null : input.getTenantId();
                 final String tableName = input.getTableName();
                 final String scenarioName = input.getScenarioName();
                 final List<Column> columns = upsert.getColumn();
@@ -73,7 +73,16 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
                 long startTime = 0, duration, totalDuration;
                 int status = 0;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
                 try (Connection connection = phoenixUtil.getConnection(tenantId)) {
+                    // If list of columns not provided then use all columns for upsert.
+                    if (columns.isEmpty()) {
+                        List<Column> allCols = phoenixUtil.getColumnsFromPhoenix(scenario.getSchemaName(),
+                                scenario.getTableNameWithoutSchemaName(),
+                                connection);
+                        columns.addAll(allCols);
+                    }
+
                     String sql = phoenixUtil.buildSql(columns, tableName);
                     startTime = EnvironmentEdgeManager.currentTimeMillis();
                     PreparedStatement stmt = null;
