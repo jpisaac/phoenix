@@ -67,7 +67,7 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
                 final List<Column> columns = upsert.getColumn();
 
                 final String opName = String.format("%s:%s:%s:%s:%s",
-                        scenarioName, tableName, opGroup, tenantGroup, tenantId);
+                        scenarioName, tableName, opGroup, tenantGroup, input.getTenantId());
 
                 long rowsCreated = 0;
                 long startTime = 0, duration, totalDuration;

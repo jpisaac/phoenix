@@ -60,7 +60,7 @@ public class QueryOperationSupplier extends BaseOperationSupplier {
                 final String tableName = input.getTableName();
 
                 String opName = String.format("%s:%s:%s:%s:%s", scenarioName, tableName,
-                        opGroup, tenantGroup, tenantId);
+                        opGroup, tenantGroup, input.getTenantId());
                 LOGGER.info("\nExecuting query " + query.getStatement());
 
                 long startTime = 0;
