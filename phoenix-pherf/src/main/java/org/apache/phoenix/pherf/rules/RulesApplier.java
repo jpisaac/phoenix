@@ -42,12 +42,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(RulesApplier.class);
-    private static final AtomicLong COUNTER = new AtomicLong(0);
 
     // Used to bail out of random distribution if it takes too long
     // This should never happen when distributions add up to 100
     private static final int OH_SHIT_LIMIT = 1000;
 
+    private final AtomicLong varcharCounter = new AtomicLong(0);
     private final Random rndNull;
     private final Random rndVal;
     private final RandomDataGenerator randomDataGenerator;
@@ -296,6 +296,9 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                     // Check if date has right format or not
                     data.setValue(checkDatePattern(data.getValue()));
+                } else if(DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                    RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                    data = generator.getDataValue();
                 } else if (column.getUseCurrentDate() != true){
                     int minYear = (int) column.getMinValue();
                     int maxYear = (int) column.getMaxValue();
@@ -545,10 +548,10 @@ public class RulesApplier {
      */
     private DataValue getSequentialVarcharDataValue(Column column) {
         DataValue data = null;
-        long inc = COUNTER.getAndIncrement();
+        long inc = varcharCounter.getAndIncrement();
         String strInc = String.valueOf(inc);
         int paddedLength = column.getLengthExcludingPrefix();
-        String strInc1 = StringUtils.leftPad(strInc, paddedLength, "0");
+        String strInc1 = StringUtils.leftPad(strInc, paddedLength, "x");
         String strInc2 = StringUtils.right(strInc1, column.getLengthExcludingPrefix());
         String varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc2:
                 strInc2;
@@ -571,8 +574,18 @@ public class RulesApplier {
     private RuleBasedDataGenerator getRuleBasedDataGeneratorForColumn(Column column) {
         RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column);
         if(generator == null) {
-            //For now we only have one of these, likely this should replace all all the methods
-            generator = new SequentialIntegerDataGenerator(column);
+            //For now we only have couple of these, likely this should replace for all the methods
+            switch (column.getType()) {
+                case DATE:
+                    generator = new SequentialDateDataGenerator(column);
+                    break;
+                case BIGINT:
+                case INTEGER:
+                case TINYINT:
+                case UNSIGNED_LONG:
+                    generator = new SequentialIntegerDataGenerator(column);
+                    break;
+            }
             columnRuleBasedDataGeneratorMap.put(column,generator);
         }
         return generator;
