@@ -22,23 +22,23 @@ import com.google.common.base.Preconditions;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataSequence;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import org.joda.time.LocalDateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class SequentialDateDataGenerator implements RuleBasedDataGenerator {
-    private static DateTimeFormatter FMT = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS");
+public class SequentialListDataGenerator implements RuleBasedDataGenerator {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SequentialListDataGenerator.class);
+
     private final Column columnRule;
-    private final AtomicInteger counter;
-    private final LocalDateTime startDateTime = new LocalDateTime();
+    private final AtomicLong counter;
 
-    public SequentialDateDataGenerator(Column columnRule) {
+    public SequentialListDataGenerator(Column columnRule) {
         Preconditions.checkArgument(columnRule.getDataSequence() == DataSequence.SEQUENTIAL);
-        Preconditions.checkArgument(isDateType(columnRule.getType()));
+        Preconditions.checkArgument(columnRule.getDataValues().size() > 0);
         this.columnRule = columnRule;
-        counter = new AtomicInteger(0);
+        counter = new AtomicLong(0);
+        LOGGER.info(String.format("Adding rule for %s, %d", columnRule.getName(), columnRule.getDataValues().size()));
     }
 
     /**
@@ -47,19 +47,9 @@ public class SequentialDateDataGenerator implements RuleBasedDataGenerator {
      */
     @Override
     public DataValue getDataValue() {
-        LocalDateTime newDateTime = startDateTime.plusSeconds(counter.incrementAndGet());
-        String formattedDateTime = newDateTime.toString(FMT);
-        return new DataValue(columnRule.getType(), formattedDateTime);
+        long pos = counter.incrementAndGet();
+        int index = (int) pos % columnRule.getDataValues().size();
+        return columnRule.getDataValues().get(index);
     }
 
-    // Probably could go into a util class in the future
-    boolean isDateType(DataTypeMapping mapping) {
-        switch (mapping) {
-        case DATE:
-        case TIMESTAMP:
-            return true;
-        default:
-            return false;
-        }
-    }
 }
