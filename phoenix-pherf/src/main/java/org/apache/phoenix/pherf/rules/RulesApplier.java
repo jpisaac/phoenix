@@ -59,7 +59,7 @@ public class RulesApplier {
     private String cachedScenarioOverrideName;
     private Map<DataTypeMapping, List> scenarioOverrideMap;
 
-    private Map<Column,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new HashMap<>();
+    private Map<String,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new HashMap<>();
 
     // Since rules are only relevant for a given data model,
     // added a constructor to support a single data model => RulesApplier(DataModel model)
@@ -218,7 +218,12 @@ public class RulesApplier {
             case CHAR:
                 // Use the specified data values from configs if they exist
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = pickDataValueFromList(dataValues);
+                    if(DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                        RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                        data = generator.getDataValue();
+                    } else {
+                        data = pickDataValueFromList(dataValues);
+                    }
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
                     if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
@@ -572,21 +577,27 @@ public class RulesApplier {
     }
 
     private RuleBasedDataGenerator getRuleBasedDataGeneratorForColumn(Column column) {
-        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column);
+        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column.getName());
         if(generator == null) {
             //For now we only have couple of these, likely this should replace for all the methods
             switch (column.getType()) {
-                case DATE:
-                    generator = new SequentialDateDataGenerator(column);
-                    break;
-                case BIGINT:
-                case INTEGER:
-                case TINYINT:
-                case UNSIGNED_LONG:
-                    generator = new SequentialIntegerDataGenerator(column);
+            case VARCHAR:
+            case VARBINARY:
+            case CHAR:
+                generator = new SequentialListDataGenerator(column);
+                break;
+            case DATE:
+            case TIMESTAMP:
+                generator = new SequentialDateDataGenerator(column);
+                break;
+            case BIGINT:
+            case INTEGER:
+            case TINYINT:
+            case UNSIGNED_LONG:
+                generator = new SequentialIntegerDataGenerator(column);
                     break;
             }
-            columnRuleBasedDataGeneratorMap.put(column,generator);
+            columnRuleBasedDataGeneratorMap.put(column.getName(),generator);
         }
         return generator;
     }
