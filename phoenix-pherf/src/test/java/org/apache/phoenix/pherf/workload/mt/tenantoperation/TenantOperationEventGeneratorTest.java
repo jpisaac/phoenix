@@ -19,12 +19,16 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.commons.math3.distribution.EnumeratedDistribution;
+import org.apache.commons.math3.util.Pair;
 import org.apache.phoenix.pherf.XMLConfigParserTest;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +36,8 @@ import org.slf4j.LoggerFactory;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -124,4 +130,30 @@ public class TenantOperationEventGeneratorTest {
             }
         }
     }
+
+    @Test public void testPMFs() throws Exception {
+        List<Pair<String, Double>> pmf = Lists.newArrayList();
+        pmf.add(new Pair("f", 0.4));
+        pmf.add(new Pair("null", 0.6));
+
+        EnumeratedDistribution<String> distribution = new EnumeratedDistribution(pmf);
+        Map<String, Integer> results = Maps.newHashMap();
+        for (int i = 0; i < 2000; i++) {
+            String sample = distribution.sample();
+            //System.out.println(String.format("sample = %s, occ = %d", sample, results.get(sample)));
+
+            Integer counts = results.get(sample);
+            if (counts == null) {
+                counts = new Integer(0);
+            }
+            counts++;
+            results.put(sample, counts);
+        }
+
+        for (String key : results.keySet()) {
+            System.out.println(String.format("sample = %s, occ = %d", key, results.get(key)));
+        }
+
+    }
+
 }

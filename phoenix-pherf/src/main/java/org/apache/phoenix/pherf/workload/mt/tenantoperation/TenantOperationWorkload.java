@@ -29,6 +29,12 @@ import com.lmax.disruptor.dsl.ProducerType;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.result.Result;
+import org.apache.phoenix.pherf.result.ResultUtil;
+import org.apache.phoenix.pherf.result.ResultValue;
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import org.apache.phoenix.pherf.result.impl.JsonResultHandler;
+import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.mt.EventGenerator;
@@ -37,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.Callable;
@@ -94,11 +101,11 @@ public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
     private final Properties properties;
     private final TenantOperationFactory operationFactory;
     private final EventGenerator<TenantOperationInfo> generator;
-    private final List<WorkHandler> handlers;
+    private final List<PherfWorkHandler> handlers;
     private final ExceptionHandler exceptionHandler;
 
     public TenantOperationWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            List<WorkHandler> workers, Properties properties) throws Exception {
+            List<PherfWorkHandler> workers, Properties properties) throws Exception {
         this(phoenixUtil, model, scenario, workers, new ContinuousWorkloadExceptionHandler(), properties);
     }
 
@@ -120,7 +127,7 @@ public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
     }
 
     public TenantOperationWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            List<WorkHandler> workers,
+            List<PherfWorkHandler> workers,
             ExceptionHandler exceptionHandler,
             Properties properties) throws Exception {
 
@@ -187,6 +194,40 @@ public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
     }
 
     @Override public void complete() {
+        // Wait for the handlers to finish the jobs
         stop();
+
+        // Collect all the results from the individual handlers
+        List<ResultValue> finalResult = new ArrayList<>();
+        Scenario scenario = getScenario();
+        for (PherfWorkHandler  pherfWorkHandler : handlers) {
+            finalResult.addAll(pherfWorkHandler.getResults());
+        }
+        try {
+            write(finalResult, null);
+            LOGGER.info(String.format("Successfully wrote results for : %s:%s:%s:%d",
+                    getModel().getName(), scenario.getName(), scenario.getTableName(),
+                    finalResult.size()));
+        } catch (Exception e) {
+            LOGGER.error(String.format("Failed to write results for : %s:%s:%s",
+                    getModel().getName(), scenario.getName(), scenario.getTableName()));
+        }
     }
+
+    private void write(List<ResultValue> finalResults, RulesApplier rulesApplier) throws Exception {
+        new ResultUtil().ensureBaseResultDirExists();
+        JsonResultHandler resultWriter = null;
+        try {
+            resultWriter = new JsonResultHandler();
+            resultWriter.setResultFileDetails(ResultFileDetails.JSON);
+            resultWriter.setResultFileName(getScenario().getName().toUpperCase());
+            resultWriter.write(new Result(ResultFileDetails.JSON, null, finalResults));
+        } finally {
+            if (resultWriter != null) {
+                resultWriter.flush();
+                resultWriter.close();
+            }
+        }
+    }
+
 }

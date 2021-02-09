@@ -28,13 +28,7 @@ import java.util.List;
  * Holds metrics + contextual info on the operation run.
  */
 public class OperationStats {
-    private final String modelName;
-    private final String scenarioName;
-    private final String tableName;
-    private final String tenantId;
-    private final String tenantGroup;
-    private final String operationGroup;
-    private final Operation.OperationType opType;
+    private final TenantOperationInfo input;
     private String handlerId;
     private final int status;
     private final long rowCount;
@@ -47,37 +41,31 @@ public class OperationStats {
             int status,
             long rowCount,
             long durationInMs) {
-        this.modelName = input.getModelName();
-        this.scenarioName = input.getScenarioName();
-        this.tableName = input.getTableName();
-        this.tenantId = input.getTenantId();
-        this.tenantGroup = input.getTenantGroupId();
-        this.operationGroup = input.getOperationGroupId();
-        this.opType = input.getOperation().getType();
+        this.input = input;
         this.startTime = startTime;
         this.status = status;
         this.rowCount = rowCount;
         this.durationInMs = durationInMs;
     }
 
-    public String getModelName() { return modelName; }
+    public String getModelName() { return this.input.getModelName(); }
 
-    public String getScenarioName() { return scenarioName; }
+    public String getScenarioName() { return this.input.getScenarioName(); }
 
-    public String getTenantId() { return tenantId; }
+    public String getTenantId() { return this.input.getTenantId(); }
 
-    public Operation.OperationType getOpType() { return opType; }
+    public Operation.OperationType getOpType() { return this.input.getOperation().getType(); }
 
     public String getTableName() {
-        return tableName;
+        return this.input.getTableName();
     }
 
     public String getTenantGroup() {
-        return tenantGroup;
+        return this.input.getTenantGroupId();
     }
 
     public String getOperationGroup() {
-        return operationGroup;
+        return this.input.getOperationGroupId();
     }
 
     public int getStatus() {
@@ -98,14 +86,14 @@ public class OperationStats {
 
     public List<ResultValue> getCsvRepresentation() {
         List<ResultValue> rowValues = new ArrayList<>();
-        rowValues.add(new ResultValue(modelName));
-        rowValues.add(new ResultValue(scenarioName));
-        rowValues.add(new ResultValue(tableName));
-        rowValues.add(new ResultValue(tenantId));
+        rowValues.add(new ResultValue(getModelName()));
+        rowValues.add(new ResultValue(getScenarioName()));
+        rowValues.add(new ResultValue(getTableName()));
+        rowValues.add(new ResultValue(getTenantId()));
         rowValues.add(new ResultValue(handlerId));
-        rowValues.add(new ResultValue(tenantGroup));
-        rowValues.add(new ResultValue(operationGroup));
-        rowValues.add(new ResultValue(opType.name()));
+        rowValues.add(new ResultValue(getTenantGroup()));
+        rowValues.add(new ResultValue(getOperationGroup()));
+        rowValues.add(new ResultValue(getOpType().name()));
         rowValues.add(new ResultValue(String.valueOf(startTime)));
         rowValues.add(new ResultValue(String.valueOf(status)));
         rowValues.add(new ResultValue(String.valueOf(rowCount)));

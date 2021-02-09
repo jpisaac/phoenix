@@ -23,10 +23,14 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationWorkload.TenantOperationEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A handler {@link WorkHandler} for
@@ -35,12 +39,12 @@ import org.slf4j.LoggerFactory;
  * when published by the workload generator {@link TenantOperationWorkload}
  */
 
-public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEvent>,
+public class TenantOperationWorkHandler implements PherfWorkHandler<TenantOperationEvent>,
         LifecycleAware {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationWorkHandler.class);
     private final String handlerId;
     private final TenantOperationFactory operationFactory;
-
+    private final List<ResultValue<OperationStats>> results = new ArrayList<>();
 
     public TenantOperationWorkHandler(TenantOperationFactory operationFactory,
             String handlerId) {
@@ -56,6 +60,7 @@ public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEv
                 operationFactory.getOperationSupplier(input);
         OperationStats stats = opSupplier.get().apply(input);
         stats.setHandlerId(handlerId);
+        results.add(new ResultValue<>(stats));
         LOGGER.info(operationFactory.getPhoenixUtil().getGSON().toJson(stats));
     }
 
@@ -71,5 +76,9 @@ public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEv
         Scenario scenario = operationFactory.getScenario();
         LOGGER.info(String.format("TenantOperationWorkHandler stopped for %s:%s",
                 scenario.getName(), scenario.getTableName()));
+    }
+
+    @Override public List<ResultValue<OperationStats>> getResults() {
+        return results;
     }
 }
