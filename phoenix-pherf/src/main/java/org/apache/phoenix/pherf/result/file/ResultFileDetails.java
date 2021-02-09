@@ -27,7 +27,8 @@ public enum ResultFileDetails {
     CSV_THIN_AGGREGATE_DATA_LOAD(Header.THIN_AGGREGATE_DATA_LOAD, Extension.CSV),
     CSV_MONITOR(Header.MONITOR, Extension.CSV),
     XML(Header.EMPTY, Extension.XML),
-    IMAGE(Header.EMPTY, Extension.VISUALIZATION);
+    IMAGE(Header.EMPTY, Extension.VISUALIZATION),
+    JSON(Header.EMPTY, Extension.JSON);
 
     private Header header;
     private Extension extension;

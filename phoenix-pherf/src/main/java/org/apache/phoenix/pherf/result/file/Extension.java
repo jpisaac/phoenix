@@ -23,7 +23,8 @@ public enum Extension {
     XML(".xml"),
     VISUALIZATION(".jpg"),
     AGGREGATE_CSV("_aggregate" + CSV),
-    DETAILED_CSV("_detail" + CSV);
+    DETAILED_CSV("_detail" + CSV),
+    JSON(".json");
 
     private String extension;
 
