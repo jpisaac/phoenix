@@ -27,6 +27,7 @@ import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
@@ -54,7 +55,7 @@ import static org.junit.Assert.assertTrue;
 public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
 
     private static class EventCountingWorkHandler implements
-            WorkHandler<TenantOperationEvent>, LifecycleAware {
+            PherfWorkHandler<TenantOperationEvent>, LifecycleAware {
         private final String handlerId;
         private final TenantOperationFactory tenantOperationFactory;
         private static final Logger LOGGER = LoggerFactory.getLogger(EventCountingWorkHandler.class);
@@ -80,6 +81,10 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
             assertEquals(0, stats.getStatus());
             latches.get(handlerId).countDown();
         }
+
+        @Override public List<ResultValue<OperationStats>> getResults() {
+            return null;
+        }
     }
 
     @Test
@@ -103,7 +108,7 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
 
                 // populate the handlers and countdown latches.
                 String handlerId = String.format("%s.%d", InetAddress.getLocalHost().getHostName(), numHandlers);
-                List<WorkHandler> workers = Lists.newArrayList();
+                List<PherfWorkHandler> workers = Lists.newArrayList();
                 Map<String, CountDownLatch> latches = Maps.newConcurrentMap();
                 workers.add(new EventCountingWorkHandler(opFactory, handlerId, latches));
                 latches.put(handlerId, new CountDownLatch(perHandlerCount));
@@ -143,7 +148,7 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
                     numOpGroups, opFactory.getOperations().size());
 
             // populate the handlers and countdown latches.
-            List<WorkHandler> workers = Lists.newArrayList();
+            List<PherfWorkHandler> workers = Lists.newArrayList();
             Map<String, CountDownLatch> latches = Maps.newConcurrentMap();
             for (int i=0;i<numHandlers;i++) {
                 String handlerId = String.format("%s.%d", InetAddress.getLocalHost().getHostName(), i);
