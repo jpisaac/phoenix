@@ -71,8 +71,6 @@
                 <numOperations>10</numOperations>
                 <!-- Case 1 : Upsert Operation test -->
                 <tenantDistribution id="tg1" weight="100" numTenants="1"></tenantDistribution>
-                <tenantDistribution id="tg2" weight="0" numTenants="0"></tenantDistribution>
-                <tenantDistribution id="tg3" weight="0" numTenants="0"></tenantDistribution>
                 <opDistribution id="upsertOp" weight="20"></opDistribution>
                 <opDistribution id="queryOp1" weight="20"></opDistribution>
                 <opDistribution id="queryOp2" weight="20"></opDistribution>
