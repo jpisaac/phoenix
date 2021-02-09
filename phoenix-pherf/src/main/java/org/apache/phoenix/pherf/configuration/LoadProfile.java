@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.pherf.configuration;
 
+import org.apache.phoenix.pherf.workload.mt.Operation;
+
 import javax.xml.bind.annotation.XmlType;
 import java.util.List;
 

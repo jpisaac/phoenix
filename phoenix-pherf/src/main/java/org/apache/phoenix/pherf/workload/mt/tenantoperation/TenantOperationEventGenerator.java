@@ -22,7 +22,6 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import com.sun.org.apache.xpath.internal.operations.Mod;
 import org.apache.commons.math3.distribution.EnumeratedDistribution;
 import org.apache.commons.math3.util.Pair;
 import org.apache.phoenix.pherf.PherfConstants;
@@ -31,11 +30,8 @@ import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.OperationGroup;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.Operation;
 import org.apache.phoenix.pherf.workload.mt.EventGenerator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -50,6 +46,7 @@ public class TenantOperationEventGenerator
         implements EventGenerator<TenantOperationInfo> {
 
     private static class WeightedRandomSampler {
+        private static String AUTO_WEIGHTED_OPERATION_ID = "xxxxxx";
         private final Random RANDOM = new Random();
         private final LoadProfile loadProfile;
         private final String modelName;
@@ -59,7 +56,8 @@ public class TenantOperationEventGenerator
 
         private final Map<String, TenantGroup> tenantGroupMap = Maps.newHashMap();
         private final Map<String, Operation> operationMap = Maps.newHashMap();
-        private final Map<String, OperationGroup> operationGroupMap = Maps.newHashMap();
+        private final List<String> autoWeightedOperations = Lists.newArrayList();
+        private final int numAutoWeightedOperations;
 
         public WeightedRandomSampler(List<Operation> operationList, DataModel model, Scenario scenario) {
             this.modelName = model.getName();
@@ -76,44 +74,17 @@ public class TenantOperationEventGenerator
                     "Tenant group cannot be empty");
 
             for (Operation op : operationList) {
-                for (OperationGroup og : loadProfile.getOpDistribution()) {
-                    if (op.getId().compareTo(og.getId()) == 0) {
+                for (OperationGroup loadOp : loadProfile.getOpDistribution()) {
+                    if (op.getId().compareTo(loadOp.getId()) == 0) {
                         operationMap.put(op.getId(), op);
-                        operationGroupMap.put(op.getId(), og);
                     }
                 }
             }
             Preconditions.checkArgument(!operationMap.isEmpty(),
                     "Operation list and load profile operation do not match");
+            this.distribution = initProbabilityDistribution(scenario.getLoadProfile());
+            this.numAutoWeightedOperations = autoWeightedOperations.size();
 
-            double totalTenantGroupWeight = 0.0f;
-            double totalOperationGroupWeight = 0.0f;
-            // Sum the weights to find the total weight,
-            // so that the weights can be used in the total probability distribution.
-            for (TenantGroup tg : loadProfile.getTenantDistribution()) {
-                totalTenantGroupWeight += tg.getWeight();
-            }
-            for (OperationGroup og : loadProfile.getOpDistribution()) {
-                totalOperationGroupWeight += og.getWeight();
-            }
-
-            Preconditions.checkArgument(totalTenantGroupWeight != 0.0f,
-                    "Total tenant group weight cannot be zero");
-            Preconditions.checkArgument(totalOperationGroupWeight != 0.0f,
-                    "Total operation group weight cannot be zero");
-
-            // Initialize the sample probability distribution
-            List<Pair<String, Double>> pmf = Lists.newArrayList();
-            double totalWeight = totalTenantGroupWeight * totalOperationGroupWeight;
-            for (TenantGroup tg : loadProfile.getTenantDistribution()) {
-                for (String opId : operationMap.keySet()) {
-                    String sampleName = String.format("%s:%s", tg.getId(), opId);
-                    int opWeight = operationGroupMap.get(opId).getWeight();
-                    double probability = (tg.getWeight() * opWeight)/totalWeight;
-                    pmf.add(new Pair(sampleName, probability));
-                }
-            }
-            this.distribution = new EnumeratedDistribution(pmf);
         }
 
         public TenantOperationInfo nextSample() {
@@ -123,6 +94,10 @@ public class TenantOperationEventGenerator
             String opId = parts[1];
 
             Operation op = operationMap.get(opId);
+            if (op == null && opId.compareTo(AUTO_WEIGHTED_OPERATION_ID) == 0) {
+                opId = autoWeightedOperations.get(RANDOM.nextInt(numAutoWeightedOperations));
+                op = operationMap.get(opId);
+            }
             int numTenants = tenantGroupMap.get(tenantGroupId).getNumTenants();
             String tenantIdPrefix = Strings.padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
             String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
@@ -133,6 +108,59 @@ public class TenantOperationEventGenerator
             TenantOperationInfo sample = new TenantOperationInfo(modelName, scenarioName, tableName,
                     tenantGroupId, opId, tenantId, op);
             return sample;
+        }
+
+        private EnumeratedDistribution initProbabilityDistribution(LoadProfile loadProfile) {
+            double totalTenantGroupWeight = 0.0f;
+            double totalOperationWeight = 0.0f;
+            double remainingOperationWeight = 0.0f;
+
+            // Sum the weights to find the total weight,
+            // so that the weights can be used in the total probability distribution.
+            for (TenantGroup tg : loadProfile.getTenantDistribution()) {
+                Preconditions.checkArgument(tg.getWeight() > 0.0f,
+                        "Tenant group weight cannot be less than zero");
+                totalTenantGroupWeight += tg.getWeight();
+            }
+            for (OperationGroup op : loadProfile.getOpDistribution()) {
+                if (op.getWeight() > 0.0f) {
+                    totalOperationWeight += op.getWeight();
+                } else {
+                    autoWeightedOperations.add(op.getId());
+                }
+            }
+
+            if (!autoWeightedOperations.isEmpty()) {
+                remainingOperationWeight = 100.0f - totalOperationWeight;
+                totalOperationWeight = 100.0f;
+            }
+
+            Preconditions.checkArgument(totalTenantGroupWeight == 100.0f,
+                    "Total tenant group weight cannot be > 100.0");
+            Preconditions.checkArgument(totalOperationWeight == 100.0f,
+                    "Total operation group weight cannot be > 100.0");
+
+            // Initialize the sample probability distribution
+            List<Pair<String, Double>> pmf = Lists.newArrayList();
+            double totalWeight = totalTenantGroupWeight * totalOperationWeight;
+            for (TenantGroup tg : loadProfile.getTenantDistribution()) {
+                for (OperationGroup op : loadProfile.getOpDistribution()) {
+                    int opWeight = op.getWeight();
+                    if (opWeight > 0.0f) {
+                        String sampleName = String.format("%s:%s", tg.getId(), op.getId());
+                        double probability = (tg.getWeight() * opWeight)/totalWeight;
+                        pmf.add(new Pair(sampleName, probability));
+                    }
+                }
+
+                if (!autoWeightedOperations.isEmpty()) {
+                    String sampleName = String.format("%s:%s", tg.getId(), AUTO_WEIGHTED_OPERATION_ID);
+                    double probability = (tg.getWeight() * remainingOperationWeight)/totalWeight;
+                    pmf.add(new Pair(sampleName, probability));
+                }
+            }
+            EnumeratedDistribution distribution = new EnumeratedDistribution(pmf);
+            return distribution;
         }
     }
 
@@ -154,4 +182,5 @@ public class TenantOperationEventGenerator
     @Override public TenantOperationInfo next() {
         return this.sampler.nextSample();
     }
+
 }
