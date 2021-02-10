@@ -70,6 +70,8 @@ public class Pherf {
                 "Pre-loads data according to specified configuration values.");
         options.addOption("scenarioFile", true,
                 "Regex or file name for the Test Scenario configuration .xml file to use.");
+        options.addOption("scenarioName", true,
+                "Regex or scenario name from the Test Scenario configuration .xml file to use.");
         options.addOption("drop", true, "Regex drop all tables with schema name as PHERF. "
                 + "\nExample drop Event tables: -drop .*(EVENT).* Drop all: -drop .* or -drop all");
         options.addOption("schemaFile", true,
@@ -105,6 +107,7 @@ public class Pherf {
 
     private final String zookeeper;
     private final String scenarioFile;
+    private final String scenarioName;
     private final String schemaFile;
     private final String queryHint;
     private final Properties properties;
@@ -165,6 +168,8 @@ public class Pherf {
         writeRuntimeResults = !command.hasOption("disableRuntimeResult");
         scenarioFile =
                 command.hasOption("scenarioFile") ? command.getOptionValue("scenarioFile") : null;
+        scenarioName =
+                command.hasOption("scenarioName") ? command.getOptionValue("scenarioName") : null;
         schemaFile = command.hasOption("schemaFile") ? command.getOptionValue("schemaFile") : null;
         rowCountOverride = Integer.parseInt(command.getOptionValue("rowCountOverride", "0"));
         generateStatistics = command.hasOption("stats") ? GeneratePhoenixStats.YES : GeneratePhoenixStats.NO;
@@ -267,8 +272,6 @@ public class Pherf {
                 new GoogleChartGenerator(compareResults, compareType).readAndRender();
                 return;
             }
-            
-            XMLConfigParser parser = new XMLConfigParser(scenarioFile);
 
             // Drop tables with PHERF schema and regex comparison
             if (null != dropPherfTablesRegEx) {
@@ -278,12 +281,6 @@ public class Pherf {
                 phoenixUtil.deleteTables(dropPherfTablesRegEx);
             }
 
-            if (monitor) {
-                monitorManager =
-                        new MonitorManager(Integer.parseInt(
-                                properties.getProperty("pherf.default.monitorFrequency")));
-                workloadExecutor.add(monitorManager);
-            }
 
             if (applySchema) {
                 LOGGER.info("\nStarting to apply schema...");
@@ -295,6 +292,19 @@ public class Pherf {
                 reader.applySchema();
             }
 
+            // If no scenario file specified then we are done.
+            if (scenarioFile == null) {
+                return;
+            }
+
+            XMLConfigParser parser = new XMLConfigParser(scenarioFile);
+            if (monitor) {
+                monitorManager =
+                        new MonitorManager(Integer.parseInt(
+                                properties.getProperty("pherf.default.monitorFrequency")));
+                workloadExecutor.add(monitorManager);
+            }
+
             // Schema and Data Load
             if (preLoadData || multiTenantWorkload) {
                 LOGGER.info("\nStarting Data Load...");
@@ -303,9 +313,17 @@ public class Pherf {
                     if (multiTenantWorkload) {
                         for (DataModel model : parser.getDataModels()) {
                             for (Scenario scenario : model.getScenarios()) {
-                                Workload workload = new TenantOperationWorkload(phoenixUtil,
-                                        model, scenario, properties);
-                                newWorkloads.add(workload);
+                                if (scenarioName != null) {
+                                    if (scenarioName.compareTo(scenario.getName()) == 0) {
+                                        Workload workload = new TenantOperationWorkload(phoenixUtil,
+                                                model, scenario, properties);
+                                        newWorkloads.add(workload);
+                                    }
+                                } else {
+                                    Workload workload = new TenantOperationWorkload(phoenixUtil,
+                                            model, scenario, properties);
+                                    newWorkloads.add(workload);
+                                }
                             }
                         }
                     } else {
