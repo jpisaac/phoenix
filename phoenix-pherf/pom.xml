@@ -213,7 +213,7 @@
 						<artifactSet>
 							<includes>
 								<include>org.apache.phoenix:phoenix-pherf</include>
-                                <include>com.google.guava:guava</include>
+								<include>org.apache.phoenix.thirdparty:phoenix-shaded-guava</include>
 								<include>com.googlecode.java-diff-utils:diffutils</include>
 								<include>org.apache.commons:commons-lang3</include>
 								<include>org.apache.commons:commons-math3</include>
