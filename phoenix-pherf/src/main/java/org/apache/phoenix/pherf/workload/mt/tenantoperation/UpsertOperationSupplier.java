@@ -18,6 +18,9 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.pherf.configuration.LoadProfile;
+import org.apache.phoenix.pherf.configuration.TenantGroup;
+import org.apache.phoenix.thirdparty.com.google.common.base.Charsets;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -26,6 +29,10 @@ import org.apache.phoenix.pherf.configuration.Upsert;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.UpsertOperation;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.hash.BloomFilter;
+import org.apache.phoenix.thirdparty.com.google.common.hash.Funnel;
+import org.apache.phoenix.thirdparty.com.google.common.hash.PrimitiveSink;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,15 +42,32 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * A supplier of {@link Function} that takes {@link UpsertOperation} as an input
  */
 class UpsertOperationSupplier extends BaseOperationSupplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpsertOperationSupplier.class);
+    private Map<String, List<Column>> columnsForUpsertOps = Maps.newConcurrentMap();
+    private ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public UpsertOperationSupplier(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
         super(phoenixUtil, model, scenario);
+    }
+
+    private BloomFilter createTenantsLoadedFilter(Scenario scenario) {
+        Funnel<String> opGroupLoadedFunnel = new Funnel<String>() {
+            @Override
+            public void funnel(String opGroupId, PrimitiveSink into) {
+                into.putString(opGroupId, Charsets.UTF_8);
+            }
+        };
+
+        // This holds the info whether the upsert operation column was initialized or not.
+        return BloomFilter.create(opGroupLoadedFunnel, scenario.getUpserts().size(), 0.01);
     }
 
     @Override
@@ -66,21 +90,37 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
                 final String scenarioName = input.getScenarioName();
                 final List<Column> columns = upsert.getColumn();
 
+                // If the scenario has not defined the columns,
+                // then check if it has already been lazy loaded.
+                if (columns.isEmpty()) {
+                    if (!columnsForUpsertOps.get(opGroup).isEmpty()) {
+                        columns.addAll(columnsForUpsertOps.get(opGroup));
+                    }
+                }
+
                 final String opName = String.format("%s:%s:%s:%s:%s",
                         scenarioName, tableName, opGroup, tenantGroup, input.getTenantId());
-
                 long rowsCreated = 0;
                 long startTime = 0, duration, totalDuration;
                 int status = 0;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
                 try (Connection connection = phoenixUtil.getConnection(tenantId)) {
-                    // If list of columns not provided then use all columns for upsert.
+                    // If list of columns has not been not provided or lazy loaded
+                    // then use the metadata call to get the column list.
                     if (columns.isEmpty()) {
-                        List<Column> allCols = phoenixUtil.getColumnsFromPhoenix(scenario.getSchemaName(),
-                                scenario.getTableNameWithoutSchemaName(),
-                                connection);
-                        columns.addAll(allCols);
+                        rwLock.writeLock().lock();
+                        try {
+                            if (columns.isEmpty()) {
+                                List<Column> allCols = phoenixUtil.getColumnsFromPhoenix(scenario.getSchemaName(),
+                                        scenario.getTableNameWithoutSchemaName(),
+                                        connection);
+                                columns.addAll(allCols);
+                                columnsForUpsertOps.put(opGroup, allCols);
+                            }
+                        } finally {
+                            rwLock.writeLock().unlock();
+                        }
                     }
 
                     String sql = phoenixUtil.buildSql(columns, tableName);
