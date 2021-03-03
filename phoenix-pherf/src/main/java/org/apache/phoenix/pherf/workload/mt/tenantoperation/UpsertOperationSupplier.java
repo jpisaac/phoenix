@@ -93,7 +93,7 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
                 // If the scenario has not defined the columns,
                 // then check if it has already been lazy loaded.
                 if (columns.isEmpty()) {
-                    if (!columnsForUpsertOps.get(opGroup).isEmpty()) {
+                    if (columnsForUpsertOps.get(opGroup) != null && !columnsForUpsertOps.get(opGroup).isEmpty()) {
                         columns.addAll(columnsForUpsertOps.get(opGroup));
                     }
                 }
