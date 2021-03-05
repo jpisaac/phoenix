@@ -65,7 +65,7 @@
         </column>
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.EVT_1" name="EVT_1">
+        <scenario tableName="PHERF.EVT_1" name="EVT_1" generatorName="WEIGHTED_RANDOM">
             <loadProfile>
                 <batchSize>1</batchSize>
                 <numOperations>10</numOperations>

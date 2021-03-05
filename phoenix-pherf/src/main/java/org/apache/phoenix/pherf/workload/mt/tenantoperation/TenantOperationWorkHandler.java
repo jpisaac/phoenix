@@ -25,7 +25,7 @@ import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationWorkload.TenantOperationEvent;
+import org.apache.phoenix.pherf.workload.mt.tenantoperation.BaseTenantOperationEventGenerator.TenantOperationEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +60,8 @@ public class TenantOperationWorkHandler implements PherfWorkHandler<TenantOperat
                 operationFactory.getOperationSupplier(input);
         OperationStats stats = opSupplier.get().apply(input);
         stats.setHandlerId(handlerId);
-        results.add(new ResultValue<>(stats));
+        // TODO need to handle asynchronous result publishing
+        // results.add(new ResultValue<>(stats));
         LOGGER.info(operationFactory.getPhoenixUtil().getGSON().toJson(stats));
     }
 

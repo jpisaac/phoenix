@@ -31,7 +31,7 @@ import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationWorkload.TenantOperationEvent;
+import org.apache.phoenix.pherf.workload.mt.tenantoperation.BaseTenantOperationEventGenerator.TenantOperationEvent;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

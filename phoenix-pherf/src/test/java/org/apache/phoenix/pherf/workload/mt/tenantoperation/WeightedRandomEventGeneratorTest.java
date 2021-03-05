@@ -19,17 +19,13 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
-import org.apache.commons.math3.distribution.EnumeratedDistribution;
-import org.apache.commons.math3.util.Pair;
+import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.XMLConfigParserTest;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +33,7 @@ import org.slf4j.LoggerFactory;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.Map;
+import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -47,8 +42,8 @@ import static org.junit.Assert.assertTrue;
 /**
  * Tests the various event generation outcomes based on scenario, model and load profile.
  */
-public class TenantOperationEventGeneratorTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationEventGeneratorTest.class);
+public class WeightedRandomEventGeneratorTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(WeightedRandomEventGeneratorTest.class);
     private enum TestOperationGroup {
         upsertOp, queryOp1, queryOp2, idleOp, udfOp
     }
@@ -69,10 +64,7 @@ public class TenantOperationEventGeneratorTest {
     }
 
     /**
-     * Case 1 : where some operations have zero weight
-     * Case 2 : where some tenant groups have zero weight
-     * Case 3 : where no operations and tenant groups have zero weight
-     * Case 4 : where some combinations of operation and tenant groups have zero weight
+     * Case : where no operations and tenant groups have zero weight
      *
      * @throws Exception
      */
@@ -80,12 +72,15 @@ public class TenantOperationEventGeneratorTest {
     public void testVariousEventGeneration() throws Exception {
         int numRuns = 10;
         int numOperations = 100000;
-        int allowedVariance = 1500;
-        int normalizedOperations = (numOperations * numRuns) / 10000;
+        double normalizedOperations = (double) (numOperations * numRuns) / 10000.0f;
         int numTenantGroups = 3;
         int numOpGroups = 5;
+        double variancePercent = 0.05f; // 5 percent
 
         PhoenixUtil pUtil = PhoenixUtil.create();
+        Properties properties = PherfConstants
+                .create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
+
         DataModel model = readTestDataModel("/scenario/test_evt_gen1.xml");
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
@@ -95,24 +90,24 @@ public class TenantOperationEventGeneratorTest {
             assertEquals("operation group size is not as expected: ",
                     numOpGroups, loadProfile.getOpDistribution().size());
             // Calculate the expected distribution.
-            int[][] expectedDistribution = new int[numOpGroups][numTenantGroups];
+            double[][] expectedDistribution = new double[numOpGroups][numTenantGroups];
             for (int r = 0; r < numOpGroups; r++) {
                 for (int c = 0; c < numTenantGroups; c++) {
                     int tenantWeight = loadProfile.getTenantDistribution().get(c).getWeight();
                     int opWeight = loadProfile.getOpDistribution().get(r).getWeight();
                     expectedDistribution[r][c] = normalizedOperations * (tenantWeight * opWeight);
-                    LOGGER.debug(String.format("Expected [%d,%d] = %d", r, c, expectedDistribution[r][c]));
+                    LOGGER.debug(String.format("Expected [%d,%d] = %f", r, c, expectedDistribution[r][c]));
                 }
             }
-            TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
+
+            WeightedRandomEventGenerator evtGen = new WeightedRandomEventGenerator(
+                    pUtil, model, scenario, properties);
 
             // Calculate the actual distribution.
-            int[][] distribution = new int[numOpGroups][numTenantGroups];
+            double[][] distribution = new double[numOpGroups][numTenantGroups];
             for (int i = 0; i < numRuns; i++) {
                 int ops = numOperations;
                 loadProfile.setNumOperations(ops);
-                TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
-                        opFactory.getOperations(), model, scenario);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
                     int row = TestOperationGroup.valueOf(info.getOperationGroupId()).ordinal();
@@ -125,27 +120,38 @@ public class TenantOperationEventGeneratorTest {
             // is within the margin of allowed variance.
             for (int r = 0; r < numOpGroups; r++) {
                 for (int c = 0; c < numTenantGroups; c++) {
-                    LOGGER.debug(String.format("Actual[%d,%d] = %d", r, c, distribution[r][c]));
-                    int diff = Math.abs(expectedDistribution[r][c] - distribution[r][c]);
+                    double allowedVariance = expectedDistribution[r][c] * variancePercent;
+                    double diff = Math.abs(expectedDistribution[r][c] - distribution[r][c]);
                     boolean isAllowed = diff < allowedVariance;
+                    LOGGER.debug(String.format("Actual[%d,%d] = %f, %f, %f",
+                            r, c, distribution[r][c], diff, allowedVariance));
                     assertTrue(String.format("Difference is outside the allowed variance "
-                            + "[expected = %d, actual = %d]", allowedVariance, diff), isAllowed);
+                            + "[expected = %f, actual = %f]", allowedVariance, diff), isAllowed);
 
                 }
             }
         }
     }
 
+    /**
+     * Case : where some operations  have zero weight
+     *
+     * @throws Exception
+     */
+
     @Test
     public void testAutoAssignedPMFs() throws Exception {
         int numRuns = 10;
         int numOperations = 100000;
-        int allowedVariance = 1500;
-        int normalizedOperations = (numOperations * numRuns) / 10000;
+        double normalizedOperations = (double) (numOperations * numRuns) / 10000.0f;
         int numTenantGroups = 3;
         int numOpGroups = 11;
+        double variancePercent = 0.05f; // 5 percent
 
         PhoenixUtil pUtil = PhoenixUtil.create();
+        Properties properties = PherfConstants
+                .create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
+
         DataModel model = readTestDataModel("/scenario/test_evt_gen2.xml");
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
@@ -175,7 +181,7 @@ public class TenantOperationEventGeneratorTest {
                     remainingOperationWeight, autoAssignedOperationWeight ));
 
             // Calculate the expected distribution.
-            int[][] expectedDistribution = new int[numOpGroups][numTenantGroups];
+            double[][] expectedDistribution = new double[numOpGroups][numTenantGroups];
             for (int r = 0; r < numOpGroups; r++) {
                 for (int c = 0; c < numTenantGroups; c++) {
                     float tenantWeight = loadProfile.getTenantDistribution().get(c).getWeight();
@@ -184,18 +190,17 @@ public class TenantOperationEventGeneratorTest {
                         opWeight = autoAssignedOperationWeight;
                     }
                     expectedDistribution[r][c] = Math.round(normalizedOperations * (tenantWeight * opWeight));
-                    LOGGER.debug(String.format("Expected [%d,%d] = %d", r, c, expectedDistribution[r][c]));
+                    LOGGER.debug(String.format("Expected [%d,%d] = %f", r, c, expectedDistribution[r][c]));
                 }
             }
-            TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
+            WeightedRandomEventGenerator evtGen = new WeightedRandomEventGenerator(
+                    pUtil, model, scenario, properties);
 
             // Calculate the actual distribution.
-            int[][] distribution = new int[numOpGroups][numTenantGroups];
+            double[][] distribution = new double[numOpGroups][numTenantGroups];
             for (int i = 0; i < numRuns; i++) {
                 int ops = numOperations;
                 loadProfile.setNumOperations(ops);
-                TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
-                        opFactory.getOperations(), model, scenario);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
                     int row = TestOperationGroup2.valueOf(info.getOperationGroupId()).ordinal();
@@ -208,11 +213,13 @@ public class TenantOperationEventGeneratorTest {
             // is within the margin of allowed variance.
             for (int r = 0; r < numOpGroups; r++) {
                 for (int c = 0; c < numTenantGroups; c++) {
-                    LOGGER.debug(String.format("Actual[%d,%d] = %d", r, c, distribution[r][c]));
-                    int diff = Math.abs(expectedDistribution[r][c] - distribution[r][c]);
+                    double allowedVariance = expectedDistribution[r][c] * variancePercent;
+                    double diff = Math.abs(expectedDistribution[r][c] - distribution[r][c]);
                     boolean isAllowed = diff < allowedVariance;
+                    LOGGER.debug(String.format("Actual[%d,%d] = %f, %f, %f",
+                            r, c, distribution[r][c], diff, allowedVariance));
                     assertTrue(String.format("Difference is outside the allowed variance "
-                            + "[expected = %d, actual = %d]", allowedVariance, diff), isAllowed);
+                            + "[expected = %f, actual = %f]", allowedVariance, diff), isAllowed);
 
                 }
             }

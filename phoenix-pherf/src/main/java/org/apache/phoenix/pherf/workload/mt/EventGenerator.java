@@ -18,6 +18,12 @@
 
 package org.apache.phoenix.pherf.workload.mt;
 
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
+
+import java.util.Properties;
+
 /**
  * An interface that implementers can use to generate events that can be consumed by
  * @see {@link com.lmax.disruptor.WorkHandler} which provide event handling functionality for
@@ -26,5 +32,22 @@ package org.apache.phoenix.pherf.workload.mt;
  * @param <T>
  */
 public interface EventGenerator<T> {
-    T next();
+    /**
+     * Initializes and readies the generator for queue based workloads
+     */
+    void start() throws Exception;
+
+    /**
+     * Stop the generator and waits for the queues to drain.
+     */
+    void stop() throws Exception;
+
+    PhoenixUtil getPhoenixUtil();
+
+    Scenario getScenario();
+
+    DataModel getModel();
+
+    Properties getProperties();
+
 }

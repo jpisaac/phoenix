@@ -51,183 +51,45 @@ import java.util.concurrent.Callable;
 /**
  * This class creates workload for tenant based load profiles.
  * It uses @see {@link TenantOperationFactory} in conjunction with
- * @see {@link TenantOperationEventGenerator} to generate the load events.
+ * @see {@link WeightedRandomEventGenerator} to generate the load events.
  * It then publishes these events onto a RingBuffer based queue.
  * The @see {@link TenantOperationWorkHandler} drains the events from the queue and executes them.
  * Reference for RingBuffer based queue http://lmax-exchange.github.io/disruptor/
  */
 
-public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
+public class TenantOperationWorkload implements Workload {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationWorkload.class);
-    private static final int DEFAULT_NUM_HANDLER_PER_MODEL = 4;
-    private static final int DEFAULT_BUFFER_SIZE = 8192;
-
-    private static class ContinuousWorkloadExceptionHandler implements ExceptionHandler {
-        @Override public void handleEventException(Throwable ex, long sequence, Object event) {
-            LOGGER.error("Sequence=" + sequence + ", event=" + event, ex);
-            throw new RuntimeException(ex);
-        }
-
-        @Override public void handleOnStartException(Throwable ex) {
-            LOGGER.error("On Start", ex);
-            throw new RuntimeException(ex);
-        }
-
-        @Override public void handleOnShutdownException(Throwable ex) {
-            LOGGER.error("On Shutdown", ex);
-            throw new RuntimeException(ex);
-        }
-    }
-
-    public static class TenantOperationEvent {
-        TenantOperationInfo tenantOperationInfo;
-
-        public TenantOperationInfo getTenantOperationInfo() {
-            return tenantOperationInfo;
-        }
-
-        public void setTenantOperationInfo(TenantOperationInfo tenantOperationInfo) {
-            this.tenantOperationInfo = tenantOperationInfo;
-        }
-
-        public static final EventFactory<TenantOperationEvent> EVENT_FACTORY = new EventFactory<TenantOperationEvent>() {
-            public TenantOperationEvent newInstance() {
-                return new TenantOperationEvent();
-            }
-        };
-    }
-
-    private Disruptor<TenantOperationEvent> disruptor;
-    private final Properties properties;
-    private final TenantOperationFactory operationFactory;
+    private final TenantOperationEventGeneratorFactory evtGeneratorFactory
+            = new TenantOperationEventGeneratorFactory();
     private final EventGenerator<TenantOperationInfo> generator;
-    private final List<PherfWorkHandler> handlers;
-    private final ExceptionHandler exceptionHandler;
+
 
     public TenantOperationWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            List<PherfWorkHandler> workers, Properties properties) throws Exception {
-        this(phoenixUtil, model, scenario, workers, new ContinuousWorkloadExceptionHandler(), properties);
-    }
-
-    public TenantOperationWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            Properties properties) throws Exception {
-
-        operationFactory = new TenantOperationFactory(phoenixUtil, model, scenario);
-        this.properties = properties;
-        this.handlers = Lists.newArrayListWithCapacity(DEFAULT_NUM_HANDLER_PER_MODEL);
-        for (int i = 0; i < DEFAULT_NUM_HANDLER_PER_MODEL; i++) {
-            String handlerId = String.format("%s.%d", InetAddress.getLocalHost().getHostName(), i+1);
-            handlers.add(new TenantOperationWorkHandler(
-                    operationFactory,
-                    handlerId));
-        }
-        this.generator = new TenantOperationEventGenerator(operationFactory.getOperations(),
-                model, scenario);
-        this.exceptionHandler = new ContinuousWorkloadExceptionHandler();
+            Properties properties) {
+        this.generator =  evtGeneratorFactory.newEventGenerator(phoenixUtil,
+                model, scenario, properties);
     }
 
     public TenantOperationWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            List<PherfWorkHandler> workers,
-            ExceptionHandler exceptionHandler,
-            Properties properties) throws Exception {
-
-        operationFactory = new TenantOperationFactory(phoenixUtil, model, scenario);
-        this.properties = properties;
-        this.generator = new TenantOperationEventGenerator(operationFactory.getOperations(),
-                model, scenario);
-        this.handlers = workers;
-        this.exceptionHandler = exceptionHandler;
-    }
-
-
-    @Override public void start() {
-
-        Scenario scenario = operationFactory.getScenario();
-        String currentThreadName = Thread.currentThread().getName();
-        disruptor = new Disruptor<TenantOperationEvent>(TenantOperationEvent.EVENT_FACTORY, DEFAULT_BUFFER_SIZE,
-                Threads.getNamedThreadFactory(currentThreadName + "." + scenario.getName() ),
-                ProducerType.SINGLE, new BlockingWaitStrategy());
-
-        this.disruptor.setDefaultExceptionHandler(this.exceptionHandler);
-        this.disruptor.handleEventsWithWorkerPool(this.handlers.toArray(new WorkHandler[] {}));
-        RingBuffer<TenantOperationEvent> ringBuffer = this.disruptor.start();
-        long numOperations = scenario.getLoadProfile().getNumOperations();
-        while (numOperations > 0) {
-            TenantOperationInfo sample = generator.next();
-            --numOperations;
-            // Publishers claim events in sequence
-            long sequence = ringBuffer.next();
-            TenantOperationEvent event = ringBuffer.get(sequence);
-            event.setTenantOperationInfo(sample);
-            // make the event available to EventProcessors
-            ringBuffer.publish(sequence);
-            LOGGER.debug(String.format("published : %s:%s:%d",
-                    scenario.getName(), scenario.getTableName(), numOperations));
-        }
-    }
-
-    @Override public void stop() {
-        this.disruptor.shutdown();
-    }
-
-    @Override public PhoenixUtil getPhoenixUtil() { return operationFactory.getPhoenixUtil(); }
-
-    @Override public Scenario getScenario() {
-        return operationFactory.getScenario();
-    }
-
-    @Override public DataModel getModel() {
-        return operationFactory.getModel();
-    }
-
-    @Override public Properties getProperties() {
-        return this.properties;
+            List<PherfWorkHandler> workHandlers, Properties properties) throws Exception {
+        this.generator =  evtGeneratorFactory.newEventGenerator(phoenixUtil,
+                model, scenario, workHandlers, properties);
     }
 
     @Override public Callable<Void> execute() throws Exception {
         return new Callable<Void>() {
             @Override public Void call() throws Exception {
-                start();
+                generator.start();
                 return null;
             }
         };
     }
 
     @Override public void complete() {
-        // Wait for the handlers to finish the jobs
-        stop();
-
-        // Collect all the results from the individual handlers
-        List<ResultValue> finalResult = new ArrayList<>();
-        Scenario scenario = getScenario();
-        for (PherfWorkHandler  pherfWorkHandler : handlers) {
-            finalResult.addAll(pherfWorkHandler.getResults());
-        }
         try {
-            write(finalResult, null);
-            LOGGER.info(String.format("Successfully wrote results for : %s:%s:%s:%d",
-                    getModel().getName(), scenario.getName(), scenario.getTableName(),
-                    finalResult.size()));
+            generator.stop();
         } catch (Exception e) {
-            LOGGER.error(String.format("Failed to write results for : %s:%s:%s",
-                    getModel().getName(), scenario.getName(), scenario.getTableName()));
+            LOGGER.error(e.getMessage());
         }
     }
-
-    private void write(List<ResultValue> finalResults, RulesApplier rulesApplier) throws Exception {
-        new ResultUtil().ensureBaseResultDirExists();
-        JsonResultHandler resultWriter = null;
-        try {
-            resultWriter = new JsonResultHandler();
-            resultWriter.setResultFileDetails(ResultFileDetails.JSON);
-            resultWriter.setResultFileName(getScenario().getName().toUpperCase());
-            resultWriter.write(new Result(ResultFileDetails.JSON, null, finalResults));
-        } finally {
-            if (resultWriter != null) {
-                resultWriter.flush();
-                resultWriter.close();
-            }
-        }
-    }
-
 }

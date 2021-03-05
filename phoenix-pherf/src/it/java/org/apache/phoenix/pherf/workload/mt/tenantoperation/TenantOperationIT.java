@@ -19,6 +19,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
@@ -32,6 +33,8 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Properties;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -43,12 +46,15 @@ public class TenantOperationIT extends MultiTenantOperationBaseIT {
 
     @Test
     public void testVariousOperations() throws Exception {
-        int numTenantGroups = 3;
+        int numTenantGroups = 1;
         int numOpGroups = 5;
         int numRuns = 10;
         int numOperations = 10;
 
         PhoenixUtil pUtil = PhoenixUtil.create();
+        Properties properties = PherfConstants
+                .create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
+
         DataModel model = readTestDataModel("/scenario/test_mt_workload.xml");
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
@@ -58,9 +64,9 @@ public class TenantOperationIT extends MultiTenantOperationBaseIT {
             assertEquals("operation group size is not as expected: ",
                     numOpGroups, loadProfile.getOpDistribution().size());
 
-            TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
-            TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
-                    opFactory.getOperations(), model, scenario);
+            WeightedRandomEventGenerator evtGen = new WeightedRandomEventGenerator(
+                    pUtil, model, scenario, properties);
+            TenantOperationFactory opFactory = evtGen.operationFactory;
 
             assertEquals("operation group size from the factory is not as expected: ",
                     numOpGroups, opFactory.getOperations().size());

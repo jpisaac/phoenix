@@ -78,6 +78,8 @@ public class PherfConstants {
     public static final int MONITOR_FREQUENCY = 5000;
     public static final String MONITOR_FILE_NAME = "STATS_MONITOR";
 
+    public static final String HANDLERS_PER_SCENARIO = "pherf.mt.handlers_per_scenario";
+
     private PherfConstants() {
     }
 

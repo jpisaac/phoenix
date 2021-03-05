@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
 import org.apache.phoenix.pherf.PherfConstants;
@@ -25,8 +26,6 @@ import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-
-import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,19 +39,19 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-
 /**
- * Tests the various operation supplier outcomes based on scenario, model and load profile.
+ * Tests the various event generation outcomes based on scenario, model and load profile.
  */
-public class TenantOperationFactoryTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationFactoryTest.class);
+public class UniformDistributionEventGeneratorTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+            UniformDistributionEventGeneratorTest.class);
 
     private enum TestOperationGroup {
-        upsertOp, queryOp1, queryOp2, idleOp, udfOp
+        upsertOp, queryOp1, queryOp2, queryOp3, queryOp4, queryOp5, queryOp6, queryOp7, idleOp, udfOp
     }
 
     private enum TestTenantGroup {
-        tg1, tg2, tg3
+        tg1
     }
 
     public DataModel readTestDataModel(String resourceName) throws Exception {
@@ -62,17 +61,25 @@ public class TenantOperationFactoryTest {
         return XMLConfigParser.readDataModel(p);
     }
 
-    @Test public void testVariousOperations() throws Exception {
-        int numTenantGroups = 3;
-        int numOpGroups = 5;
-        int numRuns = 10;
-        int numOperations = 10;
+    /**
+     * Case : where no operations and tenant groups have zero weight
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testVariousEventGeneration() throws Exception {
+        int numRuns = 100;
+        int numOperations = 1000;
+        double normalizedOperations = (double) (numOperations * numRuns) / 10000.0f;
+        int numTenantGroups = 1;
+        int numOpGroups = 10;
+        double variancePercent = 0.05f; // 5 percent
 
         PhoenixUtil pUtil = PhoenixUtil.create();
         Properties properties = PherfConstants
                 .create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
 
-        DataModel model = readTestDataModel("/scenario/test_evt_gen1.xml");
+        DataModel model = readTestDataModel("/scenario/test_evt_gen3.xml");
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
             LoadProfile loadProfile = scenario.getLoadProfile();
@@ -80,40 +87,45 @@ public class TenantOperationFactoryTest {
                     numTenantGroups, loadProfile.getTenantDistribution().size());
             assertEquals("operation group size is not as expected: ",
                     numOpGroups, loadProfile.getOpDistribution().size());
+            // Calculate the expected distribution.
+            double[][] expectedDistribution = new double[numOpGroups][numTenantGroups];
+            int tenantWeight = 100;
+            int opWeight = 10;
+            for (int r = 0; r < numOpGroups; r++) {
+                for (int c = 0; c < numTenantGroups; c++) {
+                    expectedDistribution[r][c] = normalizedOperations * (tenantWeight * opWeight);
+                    LOGGER.debug(String.format("Expected [%d,%d] = %f", r, c, expectedDistribution[r][c]));
+                }
+            }
 
-            WeightedRandomEventGenerator evtGen = new WeightedRandomEventGenerator(
+            UniformDistributionEventGenerator evtGen = new UniformDistributionEventGenerator(
                     pUtil, model, scenario, properties);
-            TenantOperationFactory opFactory = evtGen.operationFactory;
-            assertEquals("operation group size from the factory is not as expected: ",
-                    numOpGroups, opFactory.getOperations().size());
 
+            // Calculate the actual distribution.
+            double[][] distribution = new double[numOpGroups][numTenantGroups];
             for (int i = 0; i < numRuns; i++) {
                 int ops = numOperations;
                 loadProfile.setNumOperations(ops);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
-                    switch (TestOperationGroup.valueOf(info.getOperationGroupId())) {
-                    case upsertOp:
-                        assertTrue(opFactory.getOperationSupplier(info).getClass()
-                                .isAssignableFrom(UpsertOperationSupplier.class));
-                        break;
-                    case queryOp1:
-                    case queryOp2:
-                        assertTrue(opFactory.getOperationSupplier(info).getClass()
-                                .isAssignableFrom(QueryOperationSupplier.class));
-                        break;
-                    case idleOp:
-                        assertTrue(opFactory.getOperationSupplier(info).getClass()
-                                .isAssignableFrom(IdleTimeOperationSupplier.class));
-                        break;
-                    case udfOp:
-                        assertTrue(opFactory.getOperationSupplier(info).getClass()
-                                .isAssignableFrom(UserDefinedOperationSupplier.class));
-                        break;
-                    default:
-                        Assert.fail();
+                    int row = TestOperationGroup.valueOf(info.getOperationGroupId()).ordinal();
+                    int col = TestTenantGroup.valueOf(info.getTenantGroupId()).ordinal();
+                    distribution[row][col]++;
+                }
+            }
 
-                    }
+            // Validate that the expected and actual distribution
+            // is within the margin of allowed variance.
+            for (int r = 0; r < numOpGroups; r++) {
+                for (int c = 0; c < numTenantGroups; c++) {
+                    double allowedVariance = expectedDistribution[r][c] * variancePercent;
+                    double diff = Math.abs(expectedDistribution[r][c] - distribution[r][c]);
+                    boolean isAllowed = diff < allowedVariance;
+                    LOGGER.debug(String.format("Actual[%d,%d] = %f, %f, %f",
+                            r, c, distribution[r][c], diff, allowedVariance));
+                    assertTrue(String.format("Difference is outside the allowed variance "
+                            + "[expected = %f, actual = %f]", allowedVariance, diff), isAllowed);
+
                 }
             }
         }

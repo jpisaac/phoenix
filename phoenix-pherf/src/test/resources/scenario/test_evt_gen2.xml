@@ -28,7 +28,7 @@
         </column>
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.EVT_GEN2" name="EVT_GEN2">
+        <scenario tableName="PHERF.EVT_GEN2" name="EVT_GEN2" generatorName="WEIGHTED_RANDOM">
             <loadProfile>
                 <batchSize>1</batchSize>
                 <numOperations>1000</numOperations>
@@ -39,12 +39,12 @@
                 <opDistribution id="upsertOp" weight="40"></opDistribution>
                 <opDistribution id="queryOp1" weight="10"></opDistribution>
                 <opDistribution id="queryOp2" weight="10"></opDistribution>
-                <opDistribution id="queryOp3" weight="0"></opDistribution>
-                <opDistribution id="queryOp4" weight="0"></opDistribution>
-                <opDistribution id="queryOp5" weight="0"></opDistribution>
-                <opDistribution id="queryOp6" weight="0"></opDistribution>
-                <opDistribution id="queryOp7" weight="0"></opDistribution>
-                <opDistribution id="queryOp8" weight="0"></opDistribution>
+                <opDistribution id="queryOp3"></opDistribution>
+                <opDistribution id="queryOp4"></opDistribution>
+                <opDistribution id="queryOp5"></opDistribution>
+                <opDistribution id="queryOp6"></opDistribution>
+                <opDistribution id="queryOp7"></opDistribution>
+                <opDistribution id="queryOp8"></opDistribution>
                 <opDistribution id="idleOp" weight="10"></opDistribution>
                 <opDistribution id="udfOp" weight="10"></opDistribution>
             </loadProfile>

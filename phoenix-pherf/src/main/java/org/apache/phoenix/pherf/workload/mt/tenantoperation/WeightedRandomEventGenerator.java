@@ -18,6 +18,14 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import com.lmax.disruptor.BlockingWaitStrategy;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.WorkHandler;
+import com.lmax.disruptor.dsl.Disruptor;
+import com.lmax.disruptor.dsl.ProducerType;
+import org.apache.hadoop.hbase.util.Threads;
+import org.apache.phoenix.pherf.result.ResultValue;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -32,7 +40,11 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.workload.mt.Operation;
 import org.apache.phoenix.pherf.workload.mt.EventGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -42,8 +54,7 @@ import java.util.Random;
  * A perf load event generator based on the supplied load profile.
  */
 
-public class TenantOperationEventGenerator
-        implements EventGenerator<TenantOperationInfo> {
+public class WeightedRandomEventGenerator extends BaseTenantOperationEventGenerator {
 
     private static class WeightedRandomSampler {
         private static String AUTO_WEIGHTED_OPERATION_ID = "xxxxxx";
@@ -164,23 +175,70 @@ public class TenantOperationEventGenerator
         }
     }
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(WeightedRandomEventGenerator.class);
     private final WeightedRandomSampler sampler;
-    private final Properties properties;
 
-    public TenantOperationEventGenerator(List<Operation> ops, DataModel model, Scenario scenario)
-            throws Exception {
-        this(ops, model, scenario,
-                PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true));
+    public WeightedRandomEventGenerator(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
+            Properties properties) {
+        super(phoenixUtil, model, scenario, properties);
+        this.sampler = new WeightedRandomSampler(operationFactory.getOperations(), model, scenario);
     }
 
-    public TenantOperationEventGenerator(List<Operation> ops, DataModel model, Scenario scenario,
-            Properties properties) {
-        this.properties = properties;
-        this.sampler = new WeightedRandomSampler(ops, model, scenario);
+    public WeightedRandomEventGenerator(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
+            List<PherfWorkHandler> workHandlers, Properties properties) {
+        super(phoenixUtil, model, scenario, workHandlers, properties);
+        this.handlers = workHandlers;
+        this.sampler = new WeightedRandomSampler(operationFactory.getOperations(), model, scenario);
     }
 
     @Override public TenantOperationInfo next() {
         return this.sampler.nextSample();
     }
 
+    @Override public void start() throws Exception {
+        Scenario scenario = operationFactory.getScenario();
+        if (handlers == null) {
+            handlers = Lists.newArrayListWithCapacity(DEFAULT_NUM_HANDLER_PER_SCENARIO);
+            for (int i = 0; i < handlers.size(); i++) {
+                String handlerId = String.format("%s.%d", InetAddress.getLocalHost().getHostName(), i+1);
+                handlers.add(new TenantOperationWorkHandler(
+                        operationFactory,
+                        handlerId));
+            }
+        }
+
+        String currentThreadName = Thread.currentThread().getName();
+        disruptor = new Disruptor<TenantOperationEvent>(TenantOperationEvent.EVENT_FACTORY, DEFAULT_BUFFER_SIZE,
+                Threads.getNamedThreadFactory(currentThreadName + "." + scenario.getName() ),
+                ProducerType.SINGLE, new BlockingWaitStrategy());
+
+        this.disruptor.setDefaultExceptionHandler(this.exceptionHandler);
+        this.disruptor.handleEventsWithWorkerPool(this.handlers.toArray(new WorkHandler[] {}));
+        RingBuffer<TenantOperationEvent> ringBuffer = this.disruptor.start();
+        long numOperations = scenario.getLoadProfile().getNumOperations();
+        while (numOperations > 0) {
+            TenantOperationInfo sample = next();
+            --numOperations;
+            // Publishers claim events in sequence
+            long sequence = ringBuffer.next();
+            TenantOperationEvent event = ringBuffer.get(sequence);
+            event.setTenantOperationInfo(sample);
+            // make the event available to EventProcessors
+            ringBuffer.publish(sequence);
+            LOGGER.debug(String.format("published : %s:%s:%d",
+                    scenario.getName(), scenario.getTableName(), numOperations));
+        }
+    }
+
+    @Override public void stop() throws Exception {
+        Scenario scenario = operationFactory.getScenario();
+        try {
+            super.stop();
+            LOGGER.info(String.format("Successfully wrote results for : %s:%s:%s",
+                    getModel().getName(), scenario.getName(), scenario.getTableName()));
+        } catch (Exception e) {
+            LOGGER.error(String.format("Failed to write results for : %s:%s:%s",
+                    getModel().getName(), scenario.getName(), scenario.getTableName()));
+        }
+    }
 }
