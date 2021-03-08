@@ -1,0 +1,10 @@
+pipeline_template: utest-only/Jenkinsfile-1
+email_reply_to: phoenixdatabaseteam@salesforce.com,bigdatascalemultitenancy@salesforce.com 	# Change this to your group's e-mail address!
+email_only_last_committer_on_dev_branch: true
+time_out_mins: 720                                      # (Optional default = 180
+number_of_artifacts_to_keep: 3                          # (Optional) default = 3
+compliance_required: false                              # (Optional) default = true
+# The command we'll run for the unit tests stage
+unit_tests_command: export MAVEN_OPTS="-Xmx10240m" &&  mvn clean install -Dit.test='!ParameterizedPhoenixCanaryToolIT' -Drat.skip=true -Dmaven.test.failure.ignore=true
+docker_test_images:                                     # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
+- dva/sfdc_centos7_jdk8
