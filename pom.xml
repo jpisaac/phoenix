@@ -49,7 +49,7 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tools</module>
-    <module>phoenix-tracing-webapp</module>
+<!--    <module>phoenix-tracing-webapp</module>-->
   </modules>
 
   <parent>
@@ -604,11 +604,11 @@
         <artifactId>phoenix-tools</artifactId>
         <version>${project.version}</version>
       </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-tracing-webapp</artifactId>
-        <version>${project.version}</version>
-      </dependency>
+<!--      <dependency>-->
+<!--        <groupId>org.apache.phoenix</groupId>-->
+<!--        <artifactId>phoenix-tracing-webapp</artifactId>-->
+<!--        <version>${project.version}</version>-->
+<!--      </dependency>-->
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-1.5.0</artifactId>
