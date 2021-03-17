@@ -148,6 +148,9 @@
 				<directory>src/test/resources</directory>
 			</testResource>
 			<testResource>
+				<directory>src/it/resources</directory>
+			</testResource>
+			<testResource>
 				<directory>${project.basedir}/config</directory>
 			</testResource>
 		</testResources>
