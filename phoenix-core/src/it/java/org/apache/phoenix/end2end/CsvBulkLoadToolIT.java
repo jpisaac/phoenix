@@ -441,7 +441,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
             admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
         }
-        LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName);
+        LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName, false);
 
         String csvName = "/tmp/input_logical_name.csv";
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
@@ -491,8 +491,6 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertEquals("FirstName 3", rs.getString(1));
         rs.close();
         stmt.close();
-
-        checkIndexTableIsVerified(fullIndexTableName);
     }
 
     @Test
@@ -726,25 +724,6 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertFalse(rs.next());
         rs.close();
         stmt.close();
-    }
-
-    private void checkIndexTableIsVerified(String indexTableName) throws SQLException, IOException {
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        Table hTable = cqs.getTable(Bytes.toBytes(indexTableName));
-        PTable pTable = PhoenixRuntime.getTable(conn, indexTableName);
-
-        byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(pTable);
-        byte[] emptyKeyValueQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
-
-        Scan scan = new Scan();
-        scan.setFilter(new SingleColumnValueFilter(
-                emptyKeyValueCF,
-                emptyKeyValueQualifier,
-                CompareFilter.CompareOp.NOT_EQUAL,
-                IndexRegionObserver.VERIFIED_BYTES));
-        try (ResultScanner scanner = hTable.getScanner(scan)) {
-            assertNull("There are non VERIFIED rows in index", scanner.next());
-        }
     }
 
 }
