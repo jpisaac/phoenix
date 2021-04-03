@@ -76,6 +76,8 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.task.SystemTaskParams;
+import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PLong;
 import org.slf4j.Logger;
@@ -148,6 +150,13 @@ public class ViewUtil {
             byte[] viewName = viewInfo.getTableName();
             PTable view;
             Properties props = new Properties();
+            logger.info("Found an parent->child link keyed by this parent."
+                    + " Parent Tenant Id: '" + Bytes.toString(parentTenantId)
+                    + "'. Parent Schema Name: '" + Bytes.toString(parentSchemaName)
+                    + "'. Parent Table/View Name: '" + Bytes.toString(parentTableOrViewName)
+                    + "'. The child view which could not be resolved has ViewInfo: '"
+                    + viewInfo + "'.");
+
             if (viewTenantId != null) {
                 props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
             }
@@ -161,12 +170,12 @@ public class ViewUtil {
                     view = PhoenixRuntime.getTableNoCache(connection,
                             SchemaUtil.getTableName(viewSchemaName, viewName));
                 } catch (TableNotFoundException ex) {
-                    logger.error("Found an orphan parent->child link keyed by this parent."
+                    logger.info("Found an orphan parent->child link keyed by this parent."
                             + " Parent Tenant Id: '" + Bytes.toString(parentTenantId)
                             + "'. Parent Schema Name: '" + Bytes.toString(parentSchemaName)
                             + "'. Parent Table/View Name: '" + Bytes.toString(parentTableOrViewName)
                             + "'. The child view which could not be resolved has ViewInfo: '"
-                            + viewInfo + "'.", ex);
+                            + viewInfo + "'.");
                     orphanChildViews.add(viewInfo);
                     // Prune orphan branches
                     continue;
@@ -376,18 +385,19 @@ public class ViewUtil {
             byte[] viewTenantId = viewInfo.getTenantId();
             byte[] viewSchemaName = viewInfo.getSchemaName();
             byte[] viewName = viewInfo.getTableName();
-            if (logger.isDebugEnabled()) {
-                logger.debug("dropChildViews : " + Bytes.toString(schemaName) + "."
+            if (logger.isInfoEnabled()) {
+                logger.info("dropChildViews : " + Bytes.toString(schemaName) + "."
                         + Bytes.toString(tableOrViewName) + " -> "
                         + Bytes.toString(viewSchemaName) + "." + Bytes.toString(viewName)
                         + "with tenant id :" + Bytes.toString(viewTenantId));
             }
             Properties props = new Properties();
-            PTable view = null;
+            //PTable view = null;
             if (viewTenantId != null && viewTenantId.length != 0)
                 props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(props,
                     env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                PTable view = null;
                 try {
                     // Ensure that the view to be dropped has some ancestor that no longer exists
                     // (and thus will throw a TableNotFoundException). Otherwise, if we are looking
@@ -419,6 +429,31 @@ public class ViewUtil {
                 org.apache.phoenix.parse.TableName viewTableName =
                         org.apache.phoenix.parse.TableName.create(Bytes.toString(viewSchemaName),
                                 Bytes.toString(viewName));
+//
+//                try (PhoenixConnection conn =
+//                        QueryUtil.getConnectionOnServer(env.getConfiguration())
+//                                .unwrap(PhoenixConnection.class)) {
+//                    logger.info("Dropping view " + viewTableName
+//                            + " as it has not been dropped");
+//
+//                    Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+//                            .setConn(conn)
+//                            .setTaskType(PTable.TaskType.DROP_CHILD_VIEWS)
+//                            .setTenantId(Bytes.toString(viewTenantId))
+//                            .setSchemaName(Bytes.toString(viewSchemaName))
+//                            .setTableName(Bytes.toString(viewName))
+//                            .setTaskStatus(
+//                                    PTable.TaskStatus.CREATED.toString())
+//                            .setData(null)
+//                            .setPriority(null)
+//                            .setStartTs(null)
+//                            .setEndTs(null)
+//                            .setAccessCheckEnabled(true)
+//                            .build());
+//                } catch (Throwable t) {
+//                    logger.error("Adding a task to drop child views failed!", t);
+//                }
+
                 try {
                     client.dropTable(new DropTableStatement(viewTableName, PTableType.VIEW, true,
                             true, true));

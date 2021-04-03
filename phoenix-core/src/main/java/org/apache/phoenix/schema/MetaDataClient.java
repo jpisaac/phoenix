@@ -903,11 +903,27 @@ public class MetaDataClient {
             if (LOGGER.isTraceEnabled()) {
                 LOGGER.trace("addColumnsAndIndexesFromAncestors parent logical name " + table.getBaseTableLogicalName().getString() + " parent name " + table.getParentName().getString() + " tableName=" + table.getName());
             }
+            if (parentTable == null)  {
+                LOGGER.info(String.format("1.parent = %s, tblName = %s, tenant = %s, result = %s",
+                        parentName == null ? "" : parentName,
+                        parentTableName == null ? "" : parentTableName,
+                        connection.getTenantId() == null ? "empty" : connection.getTenantId(),
+                        parentResult.getMutationCode().toString()));
+
+
+            } else {
+                LOGGER.info(String.format("2.parent = %s, tblName = %s,  tenant = %s, result = %s",
+                        parentTable.getParentTableName() == null ? "" : parentTable.getParentTableName().toString(),
+                        parentTable.getTableName() == null ? "" : parentTable.getTableName().getString(),
+                        connection.getTenantId() == null ? "empty" : connection.getTenantId(),
+                        parentResult.getMutationCode().toString()));
+            }
+
             if (parentResult.getMutationCode() == MutationCode.TABLE_NOT_FOUND || parentTable == null) {
                 // this mean the parent table was dropped and the child views have not yet been
                 // dropped by the TaskRegionObserver
                 String schemaName = table.getSchemaName()!=null ? table.getSchemaName().getString() : null;
-                throw new TableNotFoundException(schemaName, parentName);
+                throw new TableNotFoundException(schemaName, parentTableName);
             }
             // only inherit columns view indexes (and not local indexes on regular tables which also have a viewIndexId)
             if (hasIndexId && parentTable.getType() != PTableType.VIEW) {
