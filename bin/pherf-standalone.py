@@ -24,6 +24,7 @@ from phoenix_utils import tryDecode
 import os
 import subprocess
 import sys
+import datetime
 import phoenix_utils
 
 phoenix_utils.setPath()
@@ -64,9 +65,9 @@ if java_home:
 else:
     java = 'java'
 
-java_cmd = java +' -Xms512m -Xmx3072m  -cp "' + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
+java_cmd = java +' -Xms512m -Xmx3072m  -cp "' + hbase_config_path + os.pathsep + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 
-
+print('%s launching %s' % (datetime.datetime.now(), java_cmd))
 os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)

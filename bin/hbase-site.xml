@@ -2,6 +2,7 @@
 <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
 <!--
 /**
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,8 +21,72 @@
  */
 -->
 <configuration>
-  <property>
-    <name>hbase.regionserver.wal.codec</name>
-    <value>org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec</value>
+    <property>
+        <name>hbase.cluster.distributed</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>hbase.unsafe.stream.capability.enforce</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>hbase.tmp.dir</name>
+        <value>/tmp/localhbase/hbase-${user.name}</value>
+    </property>
+    <property>
+        <name>hbase.localcluster.assign.random.ports</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>hbase.master.info.port</name>
+        <value>60010</value>
+    </property>
+    <property>
+        <name>hbase.regionserver.wal.codec</name>
+        <value>org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec</value>
+    </property>
+    <property>
+        <name>zookeeper.session.timeout.localHBaseCluster</name>
+        <value>120000</value>
+    </property>
+    <property>
+        <name>hbase.zookeeper.property.tickTime</name>
+        <value>6000</value>
+    </property>
+    <property>
+        <name>hbase.table.sanity.checks</name>
+        <value>false</value>
+    </property>
+    <!-- DEBUG AND TRACE -->
+    <property>
+        <name>phoenix.trace.frequency</name>
+        <value>always</value>
+    </property>
+    <property>
+        <name>phoenix.trace.enabled</name>
+        <value>true</value>
+    </property>
+    <property>
+        <name>phoenix.trace.statsTableName</name>
+        <value>TRACING.STATS</value>
+    </property>    
+    <property>
+        <name>phoenix.query.request.metrics.enabled</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>phoenix.query.global.metrics.enabled</name>
+        <value>false</value>
+    </property>
+
+    <!--
+    <property>
+       <name>hbase.coprocessor.master.classes</name>
+       <value>org.apache.hadoop.hbase.rsgroup.RSGroupAdminEndpoint</value>
+     </property>
+     <property>
+    <name>hbase.master.loadbalancer.class</name>
+     <value>org.apache.hadoop.hbase.rsgroup.RSGroupBasedLoadBalancer</value>
   </property>
+-->
 </configuration>

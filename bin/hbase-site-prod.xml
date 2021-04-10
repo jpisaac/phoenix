@@ -1,0 +1,980 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+-->
+<configuration supports_final="true">
+    
+  <property>
+    <name>hbase.rootdir</name>
+    <value></value>
+    <description>The directory shared by region servers and into
+    which HBase persists.  The URL should be 'fully-qualified'
+    to include the filesystem scheme.  For example, to specify the
+    HDFS directory '/hbase' where the HDFS instance's namenode is
+    running at namenode.example.org on port 9000, set this value to:
+    hdfs://namenode.example.org:9000/hbase.  By default HBase writes
+    into /tmp.  Change this configuration else all data will be lost
+    on machine restart.
+    </description>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  
+  <property>
+      <name>hbase.cluster.distributed</name>
+      <value>false</value>
+  </property>
+  <property>
+      <name>hbase.unsafe.stream.capability.enforce</name>
+      <value>false</value>
+  </property>
+  <property>
+      <name>hbase.tmp.dir</name>
+      <value>/tmp/localhbase/hbase-${user.name}</value>
+  </property>
+  <property>
+      <name>hbase.localcluster.assign.random.ports</name>
+      <value>false</value>
+  </property>
+  <property>
+      <name>hbase.master.info.port</name>
+      <value>60010</value>
+  </property>
+  <property>
+      <name>hbase.regionserver.wal.codec</name>
+      <value>org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec</value>
+  </property>
+  <property>
+      <name>zookeeper.session.timeout.localHBaseCluster</name>
+      <value>120000</value>
+  </property>
+  <property>
+      <name>hbase.zookeeper.property.tickTime</name>
+      <value>6000</value>
+  </property>
+  <property>
+      <name>hbase.table.sanity.checks</name>
+      <value>false</value>
+  </property>
+  <!-- DEBUG AND TRACE -->
+  <property>
+      <name>phoenix.trace.frequency</name>
+      <value>always</value>
+  </property>
+  <property>
+      <name>phoenix.trace.enabled</name>
+      <value>false</value>
+  </property>
+  <property>
+      <name>phoenix.trace.statsTableName</name>
+      <value>TRACING.STATS</value>
+  </property>    
+  <property>
+      <name>phoenix.query.request.metrics.enabled</name>
+      <value>false</value>
+  </property>
+  <property>
+      <name>phoenix.query.global.metrics.enabled</name>
+      <value>false</value>
+  </property>
+  
+  
+  <!--- From Prod -->
+  <property>
+    <name>hbase.regionserver.handler.count</name>
+    <value>256</value>
+    <description>
+      Count of RPC Listener instances spun up on RegionServers.
+      Same property is used by the Master for count of master handlers.
+    </description>
+    <display-name>Number of Handlers per RegionServer</display-name>
+    <value-attributes>
+      <type>int</type>
+      <minimum>5</minimum>
+      <maximum>50</maximum>
+      <increment-step>1</increment-step>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.hregion.memstore.flush.size</name>
+    <value>268435456</value>
+    <description>
+      The size of an individual memstore. Each column familiy within each region is allocated its own memstore.
+    </description>
+    <display-name>Memstore Flush Size</display-name>
+    <value-attributes>
+      <type>int</type>
+      <minimum>33554432</minimum>
+      <maximum>268435456</maximum>
+      <increment-step>1048576</increment-step>
+      <unit>B</unit>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>zookeeper.session.timeout</name>
+    <value>60000</value>
+    <description>ZooKeeper session timeout.
+      ZooKeeper session timeout in milliseconds. It is used in two different ways.
+      First, this value is used in the ZK client that HBase uses to connect to the ensemble.
+      It is also used by HBase when it starts a ZK server and it is passed as the 'maxSessionTimeout'. See
+      http://hadoop.apache.org/zookeeper/docs/current/zookeeperProgrammers.html#ch_zkSessions.
+      For example, if a HBase region server connects to a ZK ensemble that's also managed by HBase, then the
+      session timeout will be the one specified by this configuration. But, a region server that connects
+      to an ensemble managed with a different configuration will be subjected that ensemble's maxSessionTimeout. So,
+      even though HBase might propose using 90 seconds, the ensemble can have a max timeout lower than this and
+      it will take precedence.
+    </description>
+    <display-name>Zookeeper Session Timeout</display-name>
+    <value-attributes>
+      <type>int</type>
+      <minimum>10000</minimum>
+      <maximum>180000</maximum>
+      <unit>milliseconds</unit>
+      <increment-step>10000</increment-step>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- <property>
+    <name>hbase.client.keyvalue.maxsize</name>
+    <value>1048576</value>
+    <description>
+      Specifies the combined maximum allowed size of a KeyValue
+      instance. This is to set an upper boundary for a single entry saved in a
+      storage file. Since they cannot be split it helps avoiding that a region
+      cannot be split any further because the data is too large. It seems wise
+      to set this to a fraction of the maximum region size. Setting it to zero
+      or less disables the check.
+    </description>
+    <display-name>Maximum Record Size</display-name>
+    <value-attributes>
+      <type>int</type>
+      <minimum>1048576</minimum>
+      <maximum>31457280</maximum>
+      <unit>B</unit>
+      <increment-step>262144</increment-step>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property> -->
+  <property>
+    <name>hbase.hstore.compactionThreshold</name>
+    <value>12</value>
+    <description>
+      The maximum number of StoreFiles which will be selected for a single minor
+      compaction, regardless of the number of eligible StoreFiles. Effectively, the value of
+      hbase.hstore.compaction.max controls the length of time it takes a single compaction to
+      complete. Setting it larger means that more StoreFiles are included in a compaction. For most
+      cases, the default value is appropriate.
+    </description>
+    <display-name>Maximum Store Files before Minor Compaction</display-name>
+    <value-attributes>
+      <type>int</type>
+      <entries>
+        <entry>
+          <value>2</value>
+        </entry>
+        <entry>
+          <value>3</value>
+        </entry>
+        <entry>
+          <value>4</value>
+        </entry>
+        <entry>
+          <value>12</value>
+        </entry>
+      </entries>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.hstore.blockingStoreFiles</name>
+    <display-name>hstore blocking storefiles</display-name>
+    <value>40</value>
+    <description>
+    If more than this number of StoreFiles in any one Store
+    (one StoreFile is written per flush of MemStore) then updates are
+    blocked for this HRegion until a compaction is completed, or
+    until hbase.hstore.blockingWaitTime has been exceeded.
+    </description>
+    <value-attributes>
+      <type>int</type>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!--
+  The following three properties are used together to create the list of
+  host:peer_port:leader_port quorum servers for ZooKeeper.
+  -->
+  <property>
+    <name>hbase.zookeeper.quorum</name>
+    <value></value>
+    <description>Comma separated list of servers in the ZooKeeper Quorum.
+    For example, "host1.mydomain.com,host2.mydomain.com,host3.mydomain.com".
+    By default this is set to localhost for local and pseudo-distributed modes
+    of operation. For a fully-distributed setup, this should be set to a full
+    list of ZooKeeper quorum servers. If HBASE_MANAGES_ZK is set in hbase-env.sh
+    this is the list of servers which we will start/stop ZooKeeper on.
+    </description>
+    <value-attributes>
+      <type>multiLine</type>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- End of properties used to generate ZooKeeper host:port quorum list. -->
+  <property>
+    <name>hbase.rpc.timeout</name>
+    <value>120000</value>
+    <description>
+      This is for the RPC layer to define how long HBase client applications
+      take for a remote call to time out. It uses pings to check connections
+      but will eventually throw a TimeoutException.
+    </description>
+    <display-name>HBase RPC Timeout</display-name>
+    <value-attributes>
+      <type>int</type>
+      <minimum>10000</minimum>
+      <maximum>120000</maximum>
+      <unit>milliseconds</unit>
+      <increment-step>10000</increment-step>
+    </value-attributes>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.mapred.bufferdeletes</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.replication</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.hstore.compaction.max</name>
+    <value>20</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hfile.block.cache.size</name>
+    <value>0.4</value>
+    <description>
+        40% Percentage of maximum heap (-Xmx setting) to allocate to block cache
+        used by HFile/StoreFile. Default is 0.25.
+    </description>
+     <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+   <name>hbase.regionserver.maxlogs</name>
+   <value>64</value>
+   <description>HDFS blocksize * 0.95 * this_value should larger than 0.4*java_heap</description>
+   <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+   <name>dfs.client.read.shortcircuit.buffer.size</name>
+   <value>131072</value>
+   <description>Direct buffer size allocated by short circuit reader. Set to 128k. Default is 1mb, which leads to OOMs</description>
+   <on-ambari-upgrade add="true"/>
+ </property>
+  <property>
+    <name>hbase.regionserver.metahandler.count</name>
+    <value>100</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <!-- W-6086600: Increase number of threads available to open regions -->
+    <!-- W-7435460: Increase property to 60 in accordance with SCP tuning configs-->
+    <name>hbase.regionserver.executor.openregion.threads</name>
+    <value>30</value>
+    <description>Number of threads available to open regions</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- Disable Nagle's -->
+  <property>
+    <name>hbase.ipc.client.tcpnodelay</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>ipc.server.tcpnodelay</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.ipc.client.connection.maxidletime</name>
+    <value>60000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- Ensure not all regions are assigned to single region server upon startup -->
+  <property>
+    <name>hbase.master.wait.on.regionservers.timeout</name>
+    <value>10000</value>
+    <description>W-8331105: Give RegionServers at least 10s to report in before starting to assign regions.</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- enable load balancing decision per table, since we have small clusters -->
+  <property>
+    <name>hbase.master.loadbalance.bytable</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- make sure we do not produce too many splits -->
+  <property>
+    <name>hbase.regionserver.region.split.policy</name>
+    <value>org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy</value>
+    <description>
+      Allow regions to be spread around the machine quickly, while avoiding too many regions per table and server (at most 2)
+    </description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.regionSplitLimit</name>
+    <value>3000</value>
+    <description>
+      Limit for the number of regions after which no more region splitting should take place.
+      This is not hard limit for the number of regions but acts as a guideline for the regionserver
+      to stop splitting after a certain limit. Default is set to 1000.
+    </description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- Don't allow the web user to see data files -->
+  <property>
+    <name>hbase.data.umask.enable</name>
+    <value>true</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.data.umask</name>
+    <value>007</value>
+    <description>User and group that created the file (sfdc:sfdc) have all original permissions, but webui user is part of world, which has all permissions masked out (can't see, read, write any of the data files).</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- enable multithreaded compactions/splits -->
+  <property>
+    <name>hbase.regionserver.thread.compaction.large</name>
+    <value>1</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.thread.compaction.small</name>
+    <value>2</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.thread.split</name>
+    <value>2</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.checksum.verify</name>
+    <value>true</value>
+    <description>Let HBase do the checksums inline rather than deferring to HDFS. Save IOPs.</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+   <name>hbase.regionserver.separate.hlog.for.meta</name>
+   <value>true</value>
+   <description></description>
+   <on-ambari-upgrade add="true"/>
+ </property>
+  <property>
+    <name>replication.sleep.before.failover</name>
+    <value>30000</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>replication.source.maxretriesmultiplier</name>
+    <value>300</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+ <!-- Sleep interval in case we receive socket time out exception in replication end point while shipping edits, configured 5 mins -->
+ <property>
+    <name>replication.source.socketTimeoutMultiplier</name>
+    <value>300</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- Pick 3 slave region servers in our 16 RS slave clusters -->
+  <property>
+    <name>replication.source.ratio</name>
+    <value>0.15</value>
+    <description>Each RegionServer will pick 15 percent of the RegionServers in the slavecluster to replicate to. Default is 0.1 (= 10 percent)</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>replication.source.size.capacity</name>
+    <value>16777216</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>replication.source.eof.autorecovery</name>
+    <value>true</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- This property was added in HBASE-24764 to read peer configs from hbase-site and apply them as part of rolling restart -->
+  <!-- W-8080637 : Add SystemCatalogWALEntryFilter for enabling syscat replication. -->
+  <!-- Do not edit, please check with BigData @Scale - DataManagement team before making any changes -->
+  <property>
+    <name>hbase.replication.peer.base.config</name>
+    <value>hbase.replication.source.custom.walentryfilters=org.apache.phoenix.replication.SystemCatalogWALEntryFilter</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+      <name>hadoop.security.groups.cache.secs</name>
+      <value>922337203685477</value>
+      <description>
+        This is the config controlling the validity of the entries in the cache
+        containing the user->group mapping. When this duration has expired,
+        then the implementation of the group mapping provider is invoked to get
+        the groups of the user and then cached back. Expiry is set to max value
+        floor(2^63/1000/10)
+      </description>
+      <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.compaction.private.readers</name>
+    <value>true</value>
+    <description>Allow compactions to open private readers for files to be compacted, so that there is less interference with user-scanners also reading those files</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.hstore.min.locality.to.skip.major.compact</name>
+    <value>0.75</value>
+    <description>Recompact fully compacted files in order to restore data locality. Only do so when the files are less than 75% local</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.taskmonitor.rpc.warn.time</name>
+    <value>180000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.wal.codec</name>
+    <value>org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  
+  <property>
+    <name>phoenix.transactions.enabled</name>
+    <value>false</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>data.tx.timeout</name>
+    <value>120</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>data.tx.bind.port</name>
+    <value></value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>data.tx.snapshot.dir</name>
+    <value></value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.handler.abort.on.error.percent</name>
+    <value>0</value>
+    <description>The percent of region server RPC threads failed to abort RS.
+    -1 Disable aborting; 0 Abort if even a single handler has died;
+    0.x Abort only when this percent of handlers have died;
+    1 Abort only all of the handers have died.</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.stats.collection.enabled</name>
+    <value>false</value>
+    <on-ambari-upgrade add="true"/>
+  </property>  
+  <!-- Phoenix mutable index config changes -->
+  <property>
+    <name>hbase.region.server.rpc.scheduler.factory.class</name>
+    <value>org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory</value>
+    <description>Factory to create the Phoenix RPC Scheduler that uses separate handler pools for index and metadata updates</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.rpc.controllerfactory.class</name>
+    <value>org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory</value>
+    <description>RPC controller factory to set the priority appropriately on RPCs to make sure PhoenixRpcScheduler dispatches them correctly</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.stats.guidepost.width</name>
+    <value>20000000000</value>
+    <description>
+        A server-side parameter that specifies the number of bytes between guideposts. A smaller amount increases parallelization, but also increases the number of chunks which must be merged on the client side. The default value is 100 MB.
+    </description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.distinct.value.compress.threshold</name>
+    <value>2147483647</value>
+    <description>
+        Size in bytes beyond which aggregate operations which require tracking distinct value counts (such as COUNT DISTINCT) will use Snappy compression. Default value of Integer.MAX_VALUE should effectively disable snappy compression for these operations.
+    </description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.upsert.batch.size</name>
+    <value>100</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.index.mr.scheduler.type</name>
+    <value>CAPACITY</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.mutate.batchSize</name>
+    <value>100</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.scanner.lease.renew.enabled</name>
+    <value>false</value>
+    <description></description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.default.column.encoded.bytes.attrib</name>
+    <value>0</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.default.immutable.storage.scheme</name>
+    <value>ONE_CELL_PER_COLUMN</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.rpc.metadata.handler.count</name>
+    <value>256</value>
+    <description>Size of the handler thread pool dedicated for handling RPCs for Phoenix metadata tables</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.rpc.index.handler.count</name>
+    <value>256</value>
+    <description>Size of the handler thread pool dedicated for handling RPCs for index tables</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.index.writes.rpc.retries.number</name>
+    <value>4</value>
+    <description>Number of retries for index rpc writes.  With phoenix.index.writes.rpc.pause of 1400, a value of 4 here is approximately 15.5s total retry time</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.index.writes.rpc.pause</name>
+    <value>1400</value>
+    <description>Pause time for index rpc writes.  See phoenix.index.writes.rpc.retries.number</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.index.failure.throw.exception</name>
+    <value>true</value>
+    <description>PHOENIX-4028, index write failures not thrown to client, but index failure policy still executed</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>phoenix.index.failure.handling.rebuild</name>
+    <value>true</value>
+    <description>enable the index partial rebuild</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property >
+    <name>hbase.master.port</name>
+    <value>60000</value> <!-- 16000 is new default in 1.3 -->
+    <description>The port the HBase Master should bind to.</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.master.info.port</name>
+    <value>60010</value> <!-- 16010 is new default in 1.3 -->
+    <description>The port for the HBase Master web UI.
+        Set to -1 if you do not want a UI instance run.
+    </description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.port</name>
+    <value>60020</value> <!-- 16020 is new default in 1.3 -->
+    <description>The port the HBase RegionServer binds to.</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.info.port</name>
+    <value>60030</value> <!-- 16030 is new default in 1.3 -->
+    <description>The port for the HBase RegionServer web UI
+        Set to -1 if you do not want the RegionServer UI to run.
+    </description>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.status.multicast.address.port</name>
+    <value>60100</value> <!-- 16100 is new default in 1.3 -->
+    <description>Multicast port to use for the status publication by multicast.</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- HBASE-14148 This option enables hbase webpage to open inside a iFrame for Monitoring App OpenSource Page -->
+  <property>
+    <name>hbase.http.filter.xframeoptions.mode</name>
+    <value>ALLOW</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.hregion.percolumnfamilyflush.size.lower.bound</name>
+    <value>33554432</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.rpc.engine</name>
+    <value>org.apache.hadoop.hbase.ipc.SecureRpcEngine</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.master.procedure.threads</name>
+    <value>60</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <!-- W-8449247: Need to explicitly enable the unsafe usage on server side as the default is set to false
+                  for core app client with JDK 11 -->
+  <property>
+    <name>hbase.unsafe.usage.enabled</name>
+    <value>true</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.bulk.assignment.threadpool.size</name>
+    <value>60</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.assignment.retry.sleep.initial</name>
+    <value>1000</value>
+    <description>1 second value for exponential backoff where it is multiplied exponentially by power of 2 till maximum attempts</description>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.assignment.retry.sleep.max</name>
+    <value>120000</value>
+    <description>2 minutes value for max waiting time between attempts for exponential backoff</description>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.assignment.maximum.attempts</name>
+    <value>20</value>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>zookeeper.recovery.retry</name>
+    <value>9</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>zookeeper.recovery.retry.intervalmill</name>
+    <value>1200</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>zookeeper.recovery.retry.maxsleeptime</name>
+    <value>180000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+
+  <!-- increase snapshot creation timeout by setting hbase.snapshot.master.timeout.millis, hbase.snapshot.master.timeoutMillis and hbase.snapshot.region.timeout property 10*60000 -->
+  <property>
+    <name>hbase.snapshot.master.timeout.millis</name>
+    <value>600000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.snapshot.master.timeoutMillis</name>
+    <value>600000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.snapshot.region.timeout</name>
+    <value>600000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+
+  <!-- Increasing RPC size limit to 2GB to fix replication issues because of large Phoenix batches -->
+  <property>
+    <name>hbase.ipc.max.request.size</name>
+    <value>2147483647</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.client.scanner.caching</name>
+    <value>100</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+
+  <!-- W-7876449 Increasing replication source to sink timeout and retries -->
+  <property>
+    <name>replication.sink.client.retries.number</name>
+    <value>10</value>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>replication.sink.client.ops.timeout</name>
+    <value>60000</value>
+    <on-ambari-upgrade add="false"/>
+  </property>
+
+  <!-- Deleting properties which are extra in common-services conf file -->
+  <property>
+    <name>hbase.bulkload.staging.dir</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.hstore.flush.retries.number</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.bucketcache.ioengine</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.bucketcache.size</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.bucketcache.percentage.in.combinedcache</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>phoenix.functions.allowUserDefinedFunctions</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hadoop.security.authorization</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.coprocessor.regionserver.classes</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.global.memstore.size</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.coprocessor.master.classes</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.global.memstore.upperLimit</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.regionserver.global.memstore.lowerLimit</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.master.ui.readonly</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.master.namespace.init.timeout</name>
+    <value>3600000</value>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.custom-extensions.root</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.local.dir</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.master.info.bindAddress</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.hregion.memstore.mslab.enabled</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.client.keyvalue.maxsize</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.superuser</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.security.authentication</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.security.authorization</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.zookeeper.property.clientPort</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>zookeeper.znode.parent</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.client.retries.number</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.defaults.for.version.skip</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>phoenix.query.timeoutMs</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>phoenix.use.stats.parallelization</name>
+    <value>false</value>
+    <description>Usage of Phoenix stats for queries</description>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>dfs.domain.socket.path</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>dfs.client.socket-timeout</name>
+    <value>15000</value>
+    <description>HDFS client connect timeout</description>
+    <on-ambari-upgrade add="true"/>
+  </property>
+  <property>
+    <name>hbase.rpc.protection</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>hbase.hregion.memstore.chunkpool.maxsize</name>
+    <deleted>true</deleted>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>phoenix.coprocessor.maxServerCacheTimeToLiveMs</name>
+    <value>60000</value>
+    <description>Phoenix coprocessor max server cache timeout in ms</description>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>phoenix.index.rebuild.rpc.timeout</name>
+    <value>3600000</value>
+    <on-ambari-upgrade add="false"/>
+  </property>
+  <property>
+    <name>phoenix.index.rebuild.client.scanner.timeout</name>
+    <value>3600000</value>
+    <on-ambari-upgrade add="false"/>
+  </property>
+    <!-- logging to SYSTEM.LOG support-->
+    <property>
+        <name>phoenix.log.level</name>
+        <value>OFF</value>
+        <on-ambari-upgrade add="true"/>      
+    </property>
+    <!-- Auto upgrade support-->
+    <property>
+        <name>phoenix.autoupgrade.enabled</name>
+        <value>false</value>
+        <on-ambari-upgrade add="true"/>      
+    </property>
+    <!-- configuration changes for 4.16 rollout-->
+    <property>
+        <name>phoenix.system.catalog.splittable</name>
+        <value>false</value>
+        <description>property to disable SYSTEM.CATLOG from splitting</description>
+    </property>
+    <property>
+        <name>phoenix.index.longViewIndex.enabled</name>
+        <value>false</value>
+        <description>property which enables client to read/write 2 or 8 bytes to index table</description>
+    </property>
+    <property>
+        <name>phoenix.allow.system.catalog.rollback</name>
+        <value>false</value>
+        <description>propery which disallows SYSTEM.CATALOG from splitting even if phoenix.system.catalog.splottable is set to true</description>
+    </property>
+
+</configuration>

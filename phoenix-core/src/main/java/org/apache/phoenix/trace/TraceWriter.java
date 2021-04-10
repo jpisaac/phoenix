@@ -133,12 +133,13 @@ public class TraceWriter {
         private int counter = 0;
 
         public FlushMetrics() {
-            conn = getConnection(tableName);
         }
 
         @Override
         public void run() {
-            if (conn == null) return;
+            if (conn == null) {
+                conn = getConnection(tableName);
+            }
             while (!traceSpanReceiver.isSpanAvailable()) {
                 Span span = traceSpanReceiver.getSpan();
                 if (null == span) break;

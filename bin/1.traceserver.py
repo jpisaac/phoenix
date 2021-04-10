@@ -66,8 +66,7 @@ else:
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.current_dir)
-
+hbase_config_path = phoenix_utils.hbase_conf_dir
 
 # default paths ## TODO: add windows support
 java_home = os.getenv('JAVA_HOME')
@@ -119,20 +118,38 @@ else:
 
 #    " -Xdebug -Xrunjdwp:transport=dt_socket,address=5005,server=y,suspend=n " + \
 #    " -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true" + \
+
+    # '-cp ' + '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/hadoop-common-2.10.0-sfdc-1.6.8.jar' + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/woodstox-core-5.0.3.jar' + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/stax2-api-3.1.4.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/commons-configuration-1.6.jar' + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/commons-lang-2.6.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/commons-collections-3.2.2.jar' + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/commons-codec-1.9.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-annotations-2.10.5.jar'   + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-core-2.10.5.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-core-asl-1.9.13.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-databind-2.10.5.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-jaxrs-base-2.10.5.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-jaxrs-json-provider-2.10.5.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-mapper-asl-1.9.13.jar'  + os.pathsep + \
+    # '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/jackson-module-jaxb-annotations-2.10.5.jar'  + os.pathsep + \
+
+#    '-cp ' + '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/*' + os.pathsep + \
+
 java_cmd = '%(java)s  ' + \
-    '-cp ' + hbase_config_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + \
-    '/Users/jisaac/workspace/checkins/github/apache/phoenix/lib/*' + os.pathsep + \
-    '/Users/jisaac/workspace/forks/hbase/lib/*' + os.pathsep + \
-    '/Users/jisaac/workspace/blt/tools/Linux/hbase/hbase/hbase-1.6.0-sfdc-1.6.7/lib/*' + os.pathsep + \
-    phoenix_utils.phoenix_traceserver_jar + os.pathsep + \
-    os.pathsep + phoenix_utils.hadoop_classpath + \
+    '-cp ' + os.pathsep + hbase_config_path + os.pathsep + phoenix_utils.phoenix_traceserver_jar + os.pathsep + \
+    phoenix_utils.phoenix_client_jar + os.pathsep + \
+    os.pathsep + phoenix_utils.hadoop_classpath + os.pathsep + \
+    '/Users/jisaac/workspace/forks/hbase/lib/*:/Users/jisaac/workspace/checkins/github/apache/phoenix/lib/*'  + \
     " -Dproc_phoenixtraceserver" + \
-    " -Dlog4j.configuration=file://" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " -Dpsql.root.logger=%(root_logger)s" + \
     " -Dpsql.log.dir=%(log_dir)s" + \
     " -Dpsql.log.file=%(log_file)s" + \
     " " + opts + \
     " org.apache.phoenix.tracingwebapp.http.Main " + args
+
 print('%s launching %s' % (datetime.datetime.now(), java_cmd))
 if command == 'start':
     if not daemon_supported:

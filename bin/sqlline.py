@@ -26,6 +26,7 @@ import subprocess
 import sys
 import phoenix_utils
 import atexit
+import datetime
 
 # import argparse
 try:
@@ -110,11 +111,11 @@ if os.name == 'nt':
 java_cmd = java + ' $PHOENIX_OPTS ' + \
     ' -cp "' + hbase_config_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + \
     os.pathsep + phoenix_utils.hadoop_common_jar + os.pathsep + phoenix_utils.hadoop_hdfs_jar + \
-    os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
+    os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hbase_conf_dir + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=" + tryDecode(args.fastconnect) + \
     " --verbose=" + tryDecode(args.verbose) + " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
-
+print('%s launching %s' % (datetime.datetime.now(), java_cmd))
 os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)
