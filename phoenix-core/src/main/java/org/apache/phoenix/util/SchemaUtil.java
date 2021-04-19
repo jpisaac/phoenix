@@ -1271,15 +1271,21 @@ public class SchemaUtil {
             pTableName = "\""+pTableName+"\"";
         }
         if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
-            pTableFullName = pSchemaName + "." + pTableName;
+            if (pSchemaName != null && !pSchemaName.isEmpty()) {
+                return String.format("%s.%s", pSchemaName, pTableName);
+            } else {
+                return pTableName;
+            }
         }
-
         return pTableFullName;
     }
 
     private static boolean isQuotesNeeded(String name) {
         // first char numeric or non-underscore
-        if(!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        if (!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
             return true;
         }
         // for all other chars

@@ -218,8 +218,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
     @Test
     public void testCreateTableWithArrayColumn() throws Exception {
         String tableName = generateUniqueName();
-        String schemaName = generateUniqueName();
-        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String pTableFullName = tableName;
         String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
                 "b_char CHAR(10) NOT NULL, " +
@@ -228,7 +227,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
                 "TTL=2592000, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', REPLICATION_SCOPE=1";
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
-        String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
+        String result = runSchemaExtractionTool("", tableName, null, queries);
         Assert.assertEquals(query.toUpperCase(), result.toUpperCase());
     }
 
