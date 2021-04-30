@@ -47,6 +47,7 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
+import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -1271,7 +1272,7 @@ public class SchemaUtil {
             pTableName = "\""+pTableName+"\"";
         }
         if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
-            if (pSchemaName != null && !pSchemaName.isEmpty()) {
+            if (!Strings.isNullOrEmpty(pSchemaName)) {
                 return String.format("%s.%s", pSchemaName, pTableName);
             } else {
                 return pTableName;
@@ -1282,7 +1283,7 @@ public class SchemaUtil {
 
     private static boolean isQuotesNeeded(String name) {
         // first char numeric or non-underscore
-        if (name == null || name.isEmpty()) {
+        if (Strings.isNullOrEmpty(name)) {
             return false;
         }
         if (!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
