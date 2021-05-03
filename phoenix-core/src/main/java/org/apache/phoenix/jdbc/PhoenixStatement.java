@@ -213,7 +213,7 @@ import com.google.common.math.IntMath;
  * 
  * @since 0.1
  */
-public class PhoenixStatement implements Statement, SQLCloseable {
+public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable {
 	
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatement.class);
     
@@ -296,7 +296,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
-                        
+                        conn.checkOpen();
+
                         if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                 && stmt.getOperation() != Operation.UPGRADE) {
                             throw new UpgradeRequiredException();
@@ -1994,7 +1995,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         return ResultSet.TYPE_FORWARD_ONLY;
     }
 
-    public Operation getUpdateOperation() {
+    public Operation getUpdateOperation() throws SQLException{
         return getLastUpdateOperation();
     }
     

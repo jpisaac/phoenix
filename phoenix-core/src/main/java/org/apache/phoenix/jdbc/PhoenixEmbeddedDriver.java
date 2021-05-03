@@ -35,6 +35,7 @@ import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.procedure2.util.StringUtils;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
@@ -139,9 +140,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     protected final Connection createConnection(String url, Properties info) throws SQLException {
       Properties augmentedInfo = PropertiesUtil.deepCopy(info);
       augmentedInfo.putAll(getDefaultProps().asMap());
-      ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
-      PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
-      return connection;
+      // TODO: a better way to check if user enables the HA feature
+      if (url.contains("|")) {
+          // High availability connection using two clusters
+          HighAvailabilityGroup haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
+          return haGroup.connect(augmentedInfo);
+      } else {
+          ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
+          return cqs.connect(url, augmentedInfo);
+      }
     }
 
     /**
@@ -396,7 +403,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 }
             } // else, no connection, no need to login
             // Will use the current User from UGI
-            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+            String haGroup = info.getProperty(HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR);
+            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab, haGroup);
         }
 
         // Visible for testing
@@ -487,8 +495,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final String principal;
         private final String keytab;
         private final User user;
+        private final String haGroup;  // TODO make sure haGroup is copied and used correctly.
         
-        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode,
+                String principal, String keytab, String haGroup) {
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -503,6 +513,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
             }
+            this.haGroup = haGroup;
+        }
+
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+            this(zookeeperQuorum, port, rootNode, principal, keytab, null);
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
@@ -515,7 +530,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
          * @param other The instance to copy
          */
         public ConnectionInfo(ConnectionInfo other) {
-            this(other.zookeeperQuorum, other.port, other.rootNode, other.principal, other.keytab);
+            this(other.zookeeperQuorum, other.port, other.rootNode, other.principal, other.keytab, other.haGroup);
         }
 
         public ReadOnlyProps asProps() {
@@ -532,6 +547,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (getPrincipal() != null && getKeytab() != null) {
                 connectionProps.put(QueryServices.HBASE_CLIENT_PRINCIPAL, getPrincipal());
                 connectionProps.put(QueryServices.HBASE_CLIENT_KEYTAB, getKeytab());
+            }
+            if (getHaGroup()!= null) {
+                connectionProps.put(QueryServices.HA_GROUP_NAME_ATTRIB, getRootNode());
             }
             return connectionProps.isEmpty() ? ReadOnlyProps.EMPTY_PROPS : new ReadOnlyProps(
                     connectionProps.entrySet().iterator());
@@ -565,6 +583,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return user;
         }
 
+        public String getHaGroup() {
+            return haGroup;
+        }
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -576,6 +598,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             result = prime * result + ((keytab == null) ? 0 : keytab.hashCode());
             // `user` is guaranteed to be non-null
             result = prime * result + user.hashCode();
+            result = prime * result + ((haGroup == null) ? 0 : haGroup.hashCode());
             return result;
         }
 
@@ -602,6 +625,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (keytab == null) {
                 if (other.keytab != null) return false;
             } else if (!keytab.equals(other.keytab)) return false;
+            if (haGroup == null) {
+                if (other.haGroup != null) return false;
+            } else if (!haGroup.equals(other.haGroup)) return false;
             return true;
         }
         
@@ -610,7 +636,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 			return zookeeperQuorum + (port == null ? "" : ":" + port)
 					+ (rootNode == null ? "" : ":" + rootNode)
 					+ (principal == null ? "" : ":" + principal)
-					+ (keytab == null ? "" : ":" + keytab);
+					+ (keytab == null ? "" : ":" + keytab)
+                    + (haGroup == null ? "" : ":" + haGroup);
 		}
 
         public String toUrl() {

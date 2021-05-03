@@ -44,6 +44,7 @@ public class SQLExceptionInfo {
     public static final String MUTATION_SIZE_BYTES = "mutationSizeBytes";
     public static final String MAX_PHOENIX_COLUMN_SIZE_BYTES = "maxPhoenixColumnSizeBytes";
     public static final String PHOENIX_COLUMN_SIZE_BYTES = "phoenixColumnSizeBytes";
+    public static final String HA_GROUP_INFO = "haGroupInfo";
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
@@ -59,6 +60,7 @@ public class SQLExceptionInfo {
     private final long mutationSizeBytes;
     private final int phoenixColumnSizeBytes;
     private final int maxPhoenixColumnSizeBytes;
+    private final String haGroupInfo;
 
     public static class Builder {
 
@@ -76,6 +78,7 @@ public class SQLExceptionInfo {
         private long mutationSizeBytes;
         private int phoenixColumnSizeBytes;
         private int maxPhoenixColumnSizeBytes;
+        private String haGroupInfo;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -145,6 +148,10 @@ public class SQLExceptionInfo {
             this.maxPhoenixColumnSizeBytes = maxPhoenixColumnSizeBytes;
             return this;
         }
+        public Builder setHaGroupInfo(String haGroupInfo) {
+            this.haGroupInfo = haGroupInfo;
+            return this;
+        }
 
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
@@ -171,6 +178,7 @@ public class SQLExceptionInfo {
         mutationSizeBytes = builder.mutationSizeBytes;
         maxPhoenixColumnSizeBytes = builder.maxPhoenixColumnSizeBytes;
         phoenixColumnSizeBytes = builder.phoenixColumnSizeBytes;
+        haGroupInfo = builder.haGroupInfo;
     }
 
     @Override
@@ -210,6 +218,9 @@ public class SQLExceptionInfo {
             builder.append(" ").append(MAX_PHOENIX_COLUMN_SIZE_BYTES).append("=").append(maxPhoenixColumnSizeBytes);
             builder.append(" ").append(PHOENIX_COLUMN_SIZE_BYTES).append("=").append(phoenixColumnSizeBytes);
         }
+        if (haGroupInfo != null) {
+            builder.append(" ").append(HA_GROUP_INFO).append("=").append(haGroupInfo);
+        }
         return builder.toString();
     }
 
@@ -240,7 +251,7 @@ public class SQLExceptionInfo {
     public String getFunctionName() {
         return functionName;
     }
-    
+
     public SQLExceptionCode getCode() {
         return code;
     }
@@ -271,5 +282,9 @@ public class SQLExceptionInfo {
 
     public int getPhoenixColumnSizeBytes() {
         return phoenixColumnSizeBytes;
+    }
+
+    public String getHaGroupInfo() {
+        return haGroupInfo;
     }
 }

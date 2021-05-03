@@ -125,7 +125,7 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     }
 
 	@Override
-	public Operation getOperation() {
+	public Operation getOperation() throws SQLException {
 		return delegate.getOperation();
 	}
 	

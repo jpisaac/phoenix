@@ -66,6 +66,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.call.CallRunner;
+import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.CommitException;
@@ -139,7 +140,7 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, MetaDataMutated, SQLCloseable {
+public class PhoenixConnection implements MetaDataMutated, SQLCloseable, PhoenixMonitoredConnection {
     private final String url;
     private String schema;
     private final ConnectionQueryServices services;
@@ -174,7 +175,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private LogLevel logLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
-
+    private volatile SQLException reasonForClose;
     private final Object queueCreationLock = new Object(); // lock for the lazy init path of childConnections structure
     private ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
 
@@ -463,8 +464,9 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     /**
-     * This method, and *only* this method is thread safe
-     * @param connection
+     * This method is thread safe.
+     *
+     * @param connection child connection to be added
      */
     public void addChildConnection(PhoenixConnection connection) {
         //double check for performance
@@ -696,12 +698,30 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         }
     }
 
-    private void checkOpen() throws SQLException {
+    void checkOpen() throws SQLException {
         if (isClosed) {
-            throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.CONNECTION_CLOSED).build()
+            throw reasonForClose != null
+                ? reasonForClose
+                : new SQLExceptionInfo.Builder(SQLExceptionCode.CONNECTION_CLOSED)
+                    .build()
                     .buildException();
         }
+    }
+
+    /**
+     * Close the Phoenix connection and also store the reason for it getting closed.
+     *
+     * @param reasonForClose The reason for closing the phoenix connection to be set as state
+     *                        in phoenix connection.
+     * @throws SQLException if error happens when closing.
+     * @see #close()
+     */
+    public void close(SQLException reasonForClose) throws SQLException {
+        if (isClosed) {
+            return;
+        }
+        this.reasonForClose = reasonForClose;
+        close();
     }
 
     @Override
@@ -709,28 +729,39 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         if (isClosed) {
             return;
         }
-        try {
-            clearMetrics();
-            try {
-                if (traceScope != null) {
-                    traceScope.close();
-                }
-                closeStatements();
-                synchronized (queueCreationLock) {
-                    if (childConnections != null) {
-                        SQLCloseables.closeAllQuietly(childConnections);
-                    }
-                }
-            } finally {
-                services.removeConnection(this);
+        // A connection can be closed by client thread, or by the high availability (HA) framework.
+        // Making this logic synchronized will enforce a connection is closed only once.
+        synchronized(this) {
+            if (isClosed) {
+                return;
             }
-            
-        } finally {
-            isClosed = true;
-            if(isInternalConnection()){
-                GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
-            } else {
-                GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+            try {
+                if (!(reasonForClose instanceof FailoverSQLException)) {
+                    // If the reason for close is because of failover, the metrics will be kept for
+                    // consolidation by the wrapper PhoenixFailoverConnection object.
+                    clearMetrics();
+                }
+                try {
+                    if (traceScope != null) {
+                        traceScope.close();
+                    }
+                    closeStatements();
+                    synchronized (queueCreationLock) {
+                        if (childConnections != null) {
+                            SQLCloseables.closeAllQuietly(childConnections);
+                        }
+                    }
+                } finally {
+                    services.removeConnection(this);
+                }
+
+            } finally {
+                isClosed = true;
+                if(isInternalConnection()){
+                    GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
+                } else {
+                    GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+                }
             }
         }
     }
@@ -1270,20 +1301,24 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.traceScope = traceScope;
     }
 
+    @Override
     public Map<String, Map<MetricType, Long>> getMutationMetrics() {
         return mutationState.getMutationMetricQueue().aggregate();
     }
 
+    @Override
     public Map<String, Map<MetricType, Long>> getReadMetrics() {
-        return mutationState.getReadMetricQueue() != null ? mutationState
-                .getReadMetricQueue().aggregate() : Collections
-                .<String, Map<MetricType, Long>> emptyMap();
+        return mutationState.getReadMetricQueue() != null
+                ? mutationState.getReadMetricQueue().aggregate()
+                : Collections.<String, Map<MetricType, Long>> emptyMap();
     }
 
+    @Override
     public boolean isRequestLevelMetricsEnabled() {
         return isRequestLevelMetricsEnabled;
     }
 
+    @Override
     public void clearMetrics() {
         mutationState.getMutationMetricQueue().clearMetrics();
         if (mutationState.getReadMetricQueue() != null) {

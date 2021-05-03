@@ -21,8 +21,10 @@ import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
@@ -200,5 +202,20 @@ public class JDBCUtil {
     public static String getSchema(String url, Properties info, String defaultValue) {
         String schema = findProperty(url, info, PhoenixRuntime.SCHEMA_ATTRIB);
         return (schema == null || schema.equals("")) ? defaultValue : schema;
+    }
+
+    /**
+     * Formats a zkUrl which includes the zkQuroum of the jdbc url and the rest to sort the zk quorum hosts.
+     * Example input zkUrl "stmfb1hbase2a-mnds1-1-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-2-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-3-prd.eng.sfdc.net:2181:/hbase"
+     */
+    public static String formatZookeeperUrl(String zkUrl){
+        String lowerZkUrl = zkUrl.toLowerCase();
+        String[] components = lowerZkUrl.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR));
+        Preconditions.checkArgument(components.length > 0, "Unexpected zk url format.");
+        String[] hosts = components[0].split(",");
+        Preconditions.checkArgument(hosts.length > 0,"Unexpected zk url format no hosts found.");
+        String hostsStrings = Arrays.stream(hosts).sorted().collect(Collectors.joining(","));
+        components[0] = hostsStrings;
+        return Arrays.stream(components).collect(Collectors.joining(":"));
     }
 }

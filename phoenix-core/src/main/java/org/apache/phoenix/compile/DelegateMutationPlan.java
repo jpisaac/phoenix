@@ -62,7 +62,7 @@ public class DelegateMutationPlan implements MutationPlan {
     }
 
     @Override
-    public Operation getOperation() {
+    public Operation getOperation() throws SQLException {
         return plan.getOperation();
     }
 

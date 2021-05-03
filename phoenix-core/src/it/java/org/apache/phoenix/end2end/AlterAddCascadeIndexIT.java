@@ -52,6 +52,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -75,7 +76,6 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         this.isViewScenario = isViewScenario;
         StringBuilder optionBuilder = new StringBuilder("COLUMN_ENCODED_BYTES=0");
         if (!mutable) {
-
             optionBuilder.append(", IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'");
         }
         this.mutable = mutable;
@@ -159,7 +159,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
                 assertNumberOfHBaseCells( "_IDX_"+fullTableName,6);
             }
             else {
-                assertNumberOfHBaseCells( "_IDX_"+fullTableName,6);
+                assertNumberOfHBaseCells( "_IDX_"+fullTableName,4);
             }
         } else {
             assertDBODefinition(conn, phoenixObjectName, PTableType.TABLE, 4, columnArray, false);
@@ -167,7 +167,6 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 4, columnIndexArray, false);
             assertNumberOfHBaseCells( fullIndexNameOne,2);
             assertNumberOfHBaseCells( fullIndexNameOne,2);
-
         }
 
     }

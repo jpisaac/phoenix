@@ -270,7 +270,7 @@ public class ListJarsQueryPlan implements QueryPlan {
 	}
 
 	@Override
-	public Operation getOperation() {
+	public Operation getOperation() throws SQLException {
 		return stmt.getUpdateOperation();
 	}
 

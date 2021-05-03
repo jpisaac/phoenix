@@ -28,7 +28,7 @@ public final class JacksonUtil {
     }
 
     public static ObjectReader getObjectReader(Class clazz) {
-        return mapper.readerFor(clazz);
+        return mapper.reader(clazz);
     }
 
     public static ObjectReader getObjectReader(){
@@ -36,10 +36,15 @@ public final class JacksonUtil {
     }
 
     public static ObjectWriter getObjectWriter(Class clazz) {
-        return mapper.writerFor(clazz);
+        return mapper.writerWithType(clazz);
+    }
+
+    public static ObjectWriter getObjectWriterPretty() {
+        return mapper.writerWithDefaultPrettyPrinter();
     }
 
     public static ObjectWriter getObjectWriter(){
         return mapper.writer();
     }
+
 }

@@ -141,4 +141,33 @@ public class JDBCUtilTest {
         ReadOnlyProps readOnlyProps = new ReadOnlyProps(propMap);
         assertEquals(3000L, JDBCUtil.getMutateBatchSizeBytes("localhost", new Properties(), readOnlyProps));
     }
+
+    @Test
+    public void formatZookeeperUrlSameOrderTest() {
+        String zk1 = "stmfb1hbase2a-mnds1-1-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-2-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-3-prd.eng.sfdc.net:2181:/hbase";
+        String result = JDBCUtil.formatZookeeperUrl(zk1);
+        assertEquals(zk1,result);
+    }
+
+
+    @Test
+    public void formatZookeeperUrlDifferentOrderTest() {
+        String zk1 = "stmfb1hbase2a-mnds1-2-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-1-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-3-prd.eng.sfdc.net:2181:/hbase";
+        String result = JDBCUtil.formatZookeeperUrl(zk1);
+        assertEquals("stmfb1hbase2a-mnds1-1-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-2-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-3-prd.eng.sfdc.net:2181:/hbase",result);
+    }
+
+    @Test
+    public void formatZookeeperUrlNoTrailersTest() {
+        String zk1 = "stmfb1hbase2a-mnds1-1-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-2-prd.eng.sfdc.net,stmfb1hbase2a-mnds1-3-prd.eng.sfdc.net";
+        String result = JDBCUtil.formatZookeeperUrl(zk1);
+        assertEquals(zk1,result);
+    }
+
+    @Test
+    public void formatZookeeperUrlToLowercaseTest() {
+        String zk1 = "MYHOST1.NET,MYHOST2.NET";
+        String result = JDBCUtil.formatZookeeperUrl(zk1);
+        assertEquals(zk1.toLowerCase(),result);
+    }
 }

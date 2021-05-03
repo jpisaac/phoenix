@@ -125,7 +125,7 @@ import org.apache.phoenix.util.SchemaUtil;
  *
  * @since 0.1
  */
-public class PhoenixResultSet implements ResultSet, SQLCloseable {
+public class PhoenixResultSet implements SQLCloseable, PhoenixMonitoredResultSet {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixResultSet.class);
 
@@ -1380,14 +1380,17 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         return scanner;
     }
     
+    @Override
     public Map<String, Map<MetricType, Long>> getReadMetrics() {
         return readMetricsQueue.aggregate();
     }
 
+    @Override
     public Map<MetricType, Long> getOverAllRequestReadMetrics() {
         return overAllQueryMetrics.publish();
     }
     
+    @Override
     public void resetMetrics() {
         readMetricsQueue.clearMetrics();
         readMetricsQueue.getScanMetricsHolderList().clear();
