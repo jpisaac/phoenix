@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License"); you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="WL_WIDE_PK_MODEL">
+    <datamapping>
+        <column>
+           <type>CHAR</type>
+           <length>500</length>
+           <userDefined>true</userDefined>
+           <dataSequence>SEQUENTIAL</dataSequence>
+           <name>MYPK</name>
+        </column>
+        <column>
+           <type>INTEGER</type>
+           <userDefined>true</userDefined>
+           <dataSequence>SEQUENTIAL</dataSequence>
+           <name>CF.COLUMN1</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100</maxValue>
+            <name>GEN_RND_INT_1_100</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.WIDE_PK" name="WL_WIDE_PK_WRITE" generatorName="WEIGHTED">
+            <loadProfile>
+                <batchSize>10</batchSize>
+                <numOperations>200</numOperations>
+                <tenantDistribution id="GLOBAL" weight="100" numTenants="1"></tenantDistribution>
+                <opDistribution id="wpk_load_data" weight="100"></opDistribution>
+            </loadProfile>
+            <upserts>
+                <upsert id="wpk_load_data" useGlobalConnection="true">
+                </upsert>
+            </upserts>
+        </scenario>
+        <scenario tableName="PHERF.WIDE_PK" name="WL_WIDE_PK_READ" generatorName="WEIGHTED">
+            <loadProfile>
+                <numOperations>200</numOperations>
+                <tenantDistribution id="GLOBAL" weight="100" numTenants="1"></tenantDistribution>
+                <opDistribution id="wpk_1" weight="0"></opDistribution>
+                <opDistribution id="wpk_2" weight="0"></opDistribution>
+                <opDistribution id="wpk_3" weight="0"></opDistribution>
+                <opDistribution id="wpk_4" weight="0"></opDistribution>
+            </loadProfile>
+            <querySet>
+                <query id="wpk_1" useGlobalConnection="true" statement="select count(*) from PHERF.WIDE_PK" queryGroup="Aggregation"/>
+                <query id="wpk_2" useGlobalConnection="true" statement="select count(*) from PHERF.WIDE_PK where column2 &lt; 10" queryGroup="Aggregation with filter no non-pk"/>
+                <query id="wpk_3" useGlobalConnection="true" statement="select * from PHERF.WIDE_PK order by mypk DESC limit 10" queryGroup="Reverse Scan"/>
+                <query id="wpk_4" useGlobalConnection="true" statement="select count(*) from PHERF.WIDE_PK where column2 &lt; 50 and column3 &lt; 50 and column4 &lt; 50 and column5 &lt; 50" queryGroup="Aggregation with filter no non-pk"/>
+            </querySet>
+
+        </scenario>
+    </scenarios>
+</datamodel>

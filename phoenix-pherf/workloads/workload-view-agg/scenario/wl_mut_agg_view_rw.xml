@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License"); you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="WL_MUT_AGG_VIEW_MODEL">
+    <datamapping>
+        <column>
+            <type>DATE</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <useCurrentDate>true</useCurrentDate>
+            <name>GENERAL_DATE</name>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <length>15</length>
+            <name>GENERAL_CHAR</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <datavalue distribution="60">
+                    <value>aAAyYhnNbBs9kWk</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>bBByYhnNbBs9kWu</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>cCCyYhnNbBs9kWr</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <length>3</length>
+            <name>PARTITION_KEY</name>
+            <valuelist>
+                <datavalue distribution="100">
+                    <value>AGG</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>RANDOM</dataSequence>
+            <length>15</length>
+            <name>ID</name>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <length>2</length>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <name>HOST</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["NA","CS","EU"] -->
+                <datavalue distribution="40">
+                    <value>NA</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>CS</value>
+                </datavalue>
+                <datavalue distribution="40">
+                    <value>EU</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <name>DOMAIN</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Salesforce.com","Apple.com","Google.com","Amazon.com"]-->
+                <datavalue distribution="25">
+                    <value>Salesforce.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Apple.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Google.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Amazon.com</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <name>FEATURE</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Login","Report","Dashboard","Sales","UI"]-->
+                <datavalue distribution="20">
+                    <value>Login</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Report</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Dashboard</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Sales</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>UI</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>TIMESTAMP</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <minValue>2000</minValue>
+            <maxValue>2025</maxValue>
+            <name>DATE_T</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <name>DATE</name>
+            <minValue>1975</minValue>
+            <maxValue>2025</maxValue>
+            <valuelist>
+                <!-- Distributes randomly with equal chance of being picked -->
+                <datavalue distribution="10">
+                    <!-- Joda time format: yyyy-MM-dd HH:mm:ss.SSS ZZZ -->
+                    <minValue>1975-09-15 00:01:00.000</minValue>
+                    <maxValue>1995-09-15 00:00:59.000</maxValue>
+                </datavalue>
+                <datavalue distribution="80">
+                    <!-- Joda time format: yyyy-MM-dd HH:mm:ss.SSS ZZZ -->
+                    <minValue>1995-09-15 00:01:00.000</minValue>
+                    <maxValue>2019-09-15 10:59:00.000</maxValue>
+                </datavalue>
+                <datavalue distribution="10">
+                    <minValue>2019-09-15 00:11:00.000</minValue>
+                    <maxValue>2025-09-22 00:01:00.300</maxValue>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>CORE</name>
+        </column>
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>2000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>DB</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>10000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>ACTIVE_VISITOR</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.MUT_AGG" name="WL_MUT_AGG_VIEW_WRITE" generatorName="WEIGHTED">
+            <loadProfile>
+                <batchSize>10</batchSize>
+                <numOperations>1000</numOperations>
+                <tenantDistribution id="t10m1" weight="30" numTenants="100"/>
+                <tenantDistribution id="t10m2" weight="20" numTenants="10"/>
+                <tenantDistribution id="t10m3" weight="50" numTenants="1"/>
+                <opDistribution id="agg_w1" weight="100"/>
+            </loadProfile>
+
+            <preScenarioDdls>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.MUT_AGG AS SELECT * FROM PHERF.MUT_AGGREGATION_VIEW" />
+            </preScenarioDdls>
+            <upserts>
+                <upsert id="agg_w1" upsertGroup="write">
+                    <column>
+                        <name>PARTITION_KEY</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>ID</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>CREATED_DATE</name>
+                        <type>DATE</type>
+                    </column>
+                    <column>
+                        <name>CREATED_BY</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>LAST_UPDATE</name>
+                        <type>DATE</type>
+                    </column>
+                    <column>
+                        <name>LAST_UPDATE_BY</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>SYSTEM_MODSTAMP</name>
+                        <type>DATE</type>
+                    </column>
+                    <column>
+                        <name>HOST</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>DOMAIN</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>FEATURE</name>
+                        <type>CHAR</type>
+                    </column>
+                    <column>
+                        <name>DATE</name>
+                        <type>DATE</type>
+                    </column>
+                    <column>
+                        <name>CORE</name>
+                        <type>BIGINT</type>
+                    </column>
+                    <column>
+                        <name>DB</name>
+                        <type>BIGINT</type>
+                    </column>
+                    <column>
+                        <name>ACTIVE_VISITOR</name>
+                        <type>BIGINT</type>
+                    </column>
+                </upsert>
+            </upserts>
+        </scenario>
+        <scenario tableName="PHERF.MUT_AGG" name="WL_MUT_AGG_VIEW_READ" generatorName="WEIGHTED">
+            <loadProfile>
+                <numOperations>1000</numOperations>
+                <tenantDistribution id="t10m1" weight="30" numTenants="100"/>
+                <tenantDistribution id="t10m2" weight="20" numTenants="10"/>
+                <tenantDistribution id="t10m3" weight="50" numTenants="1"/>
+                <opDistribution id="agg_r1"/>
+                <opDistribution id="agg_r2"/>
+                <opDistribution id="agg_r3"/>
+                <opDistribution id="agg_r4"/>
+                <opDistribution id="agg_r5"/>
+                <opDistribution id="agg_r6"/>
+                <opDistribution id="agg_r7"/>
+                <opDistribution id="agg_r8"/>
+                <opDistribution id="agg_r9"/>
+                <opDistribution id="agg_r10"/>
+                <opDistribution id="agg_r11"/>
+                <opDistribution id="agg_r12"/>
+                <opDistribution id="agg_r13"/>
+                <opDistribution id="agg_r14"/>
+                <opDistribution id="agg_r15"/>
+                <opDistribution id="agg_r16"/>
+                <opDistribution id="agg_r17"/>
+                <opDistribution id="agg_r18"/>
+                <opDistribution id="agg_r19"/>
+                <opDistribution id="agg_r20"/>
+                <opDistribution id="agg_r21"/>
+                <opDistribution id="agg_r22"/>
+            </loadProfile>
+
+            <querySet>
+                <query id="agg_r1"  statement="select count(*) from PHERF.MUT_AGG" queryGroup="Aggregation"/>
+                <query id="agg_r2"  statement="select count(1) from PHERF.MUT_AGG group by HOST" queryGroup="Aggregation"/>
+                <query id="agg_r3"  statement="select core, count(1) from PHERF.MUT_AGG group by CORE" queryGroup="Aggregation"/>
+                <query id="agg_r4"  statement="select core, host, sum(ACTIVE_VISITOR) from PHERF.MUT_AGG group by core, host" queryGroup="Aggregation"/>
+                <query id="agg_r5"  statement="select AVG(DB), MIN(CORE), MAX(ACTIVE_VISITOR) from PHERF.MUT_AGG where host='CS' and DOMAIN &lt;&gt; 'Google.com'" queryGroup="Aggregation"/>
+                <query id="agg_r6"  statement="select round(date, 'day',50), sum(core)+2 from PHERF.MUT_AGG where (CORE &lt; 10 or CORE &gt; 90) group by round(date, 'day',50), host" queryGroup="Aggregation"/>
+                <query id="agg_r7"  statement="select trunc(date, 'hour', 1000), count(DB), count(ACTIVE_VISITOR) from PHERF.MUT_AGG where feature='Login' and (core &lt; 50 or db &lt; 20 or active_visitor &gt; 200) group by trunc(date, 'hour', 1000)" queryGroup="Aggregation"/>
+                <query id="agg_r8"  statement="select count(active_visitor) count from PHERF.MUT_AGG" queryGroup="Aggregation"/>
+                <query id="agg_r9"  statement="select count(distinct active_visitor) count from PHERF.MUT_AGG" queryGroup="Aggregation"/>
+                <query id="agg_r10"  statement="select percentile_cont(0.9) within group (order by active_visitor asc) from PHERF.MUT_AGG" queryGroup="Percentile"/>
+                <query id="agg_r11"  statement="select percentile_cont(0.1) within group (order by active_visitor desc) from PHERF.MUT_AGG" queryGroup="Percentile"/>
+                <query id="agg_r12"  statement="select count(core), count(db), count(active_visitor) from PHERF.MUT_AGG" queryGroup="Aggregation"/>
+                <query id="agg_r13"  statement="select count(distinct core), count(distinct db), count(distinct active_visitor) from PHERF.MUT_AGG" queryGroup="Count Distinct"/>
+                <query id="agg_r14"  statement="select percentile_cont(0.5) within group (order by core asc), percentile_cont(0.5) within group (order by db asc), percentile_cont(0.5) within group (order by active_visitor asc) from PHERF.MUT_AGG" queryGroup="Percentile"/>
+                <query id="agg_r15"  statement="select core, count(db) count from PHERF.MUT_AGG group by CORE" queryGroup="Aggregation"/>
+                <query id="agg_r16"  statement="select core, count(distinct db) count from PHERF.MUT_AGG group by CORE" queryGroup="Count Distinct"/>
+                <query id="agg_r17"  statement="select core, percentile_cont(0.9999) within group (order by db asc) from PHERF.MUT_AGG group by CORE" queryGroup="Percentile"/>
+                <query id="agg_r18"  statement="select count(core) from PHERF.MUT_AGG where core IN (1,25,50,75,100)" queryGroup="IN/LIKE Clause"/>
+                <query id="agg_r19"  statement="select count(core) from PHERF.MUT_AGG where core &lt; 10 and db &lt; 200" queryGroup="Aggregation"/>
+                <query id="agg_r20"  statement="select count(core) from PHERF.MUT_AGG where core &lt; 10 and active_visitor &lt; 1000" queryGroup="Aggregation"/>
+                <query id="agg_r21"  statement="select * from PHERF.MUT_AGG LIMIT 100" queryGroup="LIMIT"/>
+                <query id="agg_r22"  statement="select count(core) from PHERF.MUT_AGG where core &gt; 90" queryGroup="Aggregation"/>
+            </querySet>
+        </scenario>
+    </scenarios>
+</datamodel>
