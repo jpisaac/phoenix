@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License")" /> you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="WL_INDEXED_TABLE_MUTABLE_MODEL">
+    <datamapping>
+        <column>
+            <type>CHAR</type>
+            <length>2</length>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>HOST</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["NA","CS","EU"] -->
+                <datavalue distribution="34">
+                    <value>NA</value>
+                </datavalue>
+                <datavalue distribution="33">
+                    <value>CS</value>
+                </datavalue>
+                <datavalue distribution="33">
+                    <value>EU</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>DOMAIN</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Salesforce.com","Apple.com","Google.com","Amazon.com"]-->
+                <datavalue distribution="25">
+                    <value>Salesforce.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Apple.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Google.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Amazon.com</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>FEATURE</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Login","Report","Dashboard","Sales","UI"]-->
+                <datavalue distribution="20">
+                    <value>Login</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Report</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Dashboard</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Sales</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>UI</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>DATE</type>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>DATE</name>
+        </column>
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>USAGE.CORE</name>
+        </column>
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>2000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>USAGE.DB</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>10000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>STATS.ACTIVE_VISITOR</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.INDEXED_TABLE_MUTABLE" name="WL_MUT_IDX_TABLE_WRITE" generatorName="WEIGHTED">
+            <loadProfile>
+                <batchSize>10</batchSize>
+                <numOperations>200</numOperations>
+                <tenantDistribution id="dummy" weight="100" numTenants="1"></tenantDistribution>
+                <opDistribution id="mut_load_1" weight="100"></opDistribution>
+            </loadProfile>
+            <preScenarioDdls>
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx1 ON PHERF.INDEXED_TABLE_MUTABLE (CORE)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx2 ON PHERF.INDEXED_TABLE_MUTABLE (DB)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx3 ON PHERF.INDEXED_TABLE_MUTABLE (DB,ACTIVE_VISITOR)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx4 ON PHERF.INDEXED_TABLE_MUTABLE (CORE,DB,ACTIVE_VISITOR)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids1 ON PHERF.INDEXED_TABLE_MUTABLE (CORE) SALT_BUCKETS=16" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids2 ON PHERF.INDEXED_TABLE_MUTABLE (DB) SALT_BUCKETS=16" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids3 ON PHERF.INDEXED_TABLE_MUTABLE (DB,ACTIVE_VISITOR) SALT_BUCKETS=16" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids4 ON PHERF.INDEXED_TABLE_MUTABLE (CORE,DB,ACTIVE_VISITOR) SALT_BUCKETS=16" />"
+            </preScenarioDdls>
+            <upserts>
+                <upsert id="mut_load_1" useGlobalConnection="true" upsertGroup="Load"/>
+            </upserts>
+        </scenario>
+        <scenario tableName="PHERF.INDEXED_TABLE_MUTABLE" name="WL_MUT_IDX_TABLE_READ" generatorName="WEIGHTED">
+            <loadProfile>
+                <numOperations>50</numOperations>
+                <tenantDistribution id="dummy" weight="100" numTenants="1"></tenantDistribution>
+                <opDistribution id="mut_1" weight="0"></opDistribution>
+                <opDistribution id="mut_2" weight="0"></opDistribution>
+                <opDistribution id="mut_3" weight="0"></opDistribution>
+                <opDistribution id="mut_4" weight="0"></opDistribution>
+                <opDistribution id="mut_5" weight="0"></opDistribution>
+                <opDistribution id="mut_6" weight="0"></opDistribution>
+                <opDistribution id="mut_7" weight="0"></opDistribution>
+                <opDistribution id="mut_8" weight="0"></opDistribution>
+                <opDistribution id="mut_9" weight="0"></opDistribution>
+                <opDistribution id="mut_10" weight="0"></opDistribution>
+                <opDistribution id="mut_11" weight="0"></opDistribution>
+                <opDistribution id="mut_12" weight="0"></opDistribution>
+                <opDistribution id="mut_13" weight="0"></opDistribution>
+                <opDistribution id="mut_14" weight="0"></opDistribution>
+                <opDistribution id="mut_15" weight="0"></opDistribution>
+                <opDistribution id="mut_16" weight="0"></opDistribution>
+                <opDistribution id="mut_17" weight="0"></opDistribution>
+                <opDistribution id="mut_18" weight="0"></opDistribution>
+                <opDistribution id="mut_19" weight="0"></opDistribution>
+                <opDistribution id="mut_20" weight="0"></opDistribution>
+                <opDistribution id="mut_21" weight="0"></opDistribution>
+                <opDistribution id="mut_22" weight="0"></opDistribution>
+                <opDistribution id="mut_23" weight="0"></opDistribution>
+                <opDistribution id="mut_24" weight="0"></opDistribution>
+                <opDistribution id="mut_25" weight="0"></opDistribution>
+                <opDistribution id="mut_26" weight="0"></opDistribution>
+                <opDistribution id="mut_27" weight="0"></opDistribution>
+                <opDistribution id="mut_28" weight="0"></opDistribution>
+            </loadProfile>
+
+            <preScenarioDdls>
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx1 ON PHERF.INDEXED_TABLE_MUTABLE (CORE)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx2 ON PHERF.INDEXED_TABLE_MUTABLE (DB)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx3 ON PHERF.INDEXED_TABLE_MUTABLE (DB,ACTIVE_VISITOR)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS midx4 ON PHERF.INDEXED_TABLE_MUTABLE (CORE,DB,ACTIVE_VISITOR)" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids1 ON PHERF.INDEXED_TABLE_MUTABLE (CORE) SALT_BUCKETS=16" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids2 ON PHERF.INDEXED_TABLE_MUTABLE (DB) SALT_BUCKETS=16" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids3 ON PHERF.INDEXED_TABLE_MUTABLE (DB,ACTIVE_VISITOR) SALT_BUCKETS=16" />
+                <ddl useGlobalConnection="true" statement="CREATE INDEX IF NOT EXISTS mids4 ON PHERF.INDEXED_TABLE_MUTABLE (CORE,DB,ACTIVE_VISITOR) SALT_BUCKETS=16" />"
+            </preScenarioDdls>
+            <querySet>
+                <query id="mut_1" useGlobalConnection="true" statement="select count(*) from PHERF.INDEXED_TABLE_MUTABLE" queryGroup="Index"/>
+                <query id="mut_2" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  midx1 midx2 midx3 midx4) */ count(*) from PHERF.INDEXED_TABLE_MUTABLE" queryGroup="Index"/>
+                <query id="mut_3" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  mids1 mids2 mids3 mids4) */ count(*) from PHERF.INDEXED_TABLE_MUTABLE" queryGroup="Index"/>
+                <query id="mut_4" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(*) from PHERF.INDEXED_TABLE_MUTABLE" queryGroup="Index"/>
+                <query id="mut_5" useGlobalConnection="true" statement="select round(date, 'day',50), sum(core)+2 from PHERF.INDEXED_TABLE_MUTABLE where (CORE &lt; 10 or CORE &gt; 90) group by round(date, 'day',50), host" queryGroup="Index"/>
+                <query id="mut_6" useGlobalConnection="true" statement="select /*+NO_INDEX*/ round(date, 'day',50), sum(core)+2 from PHERF.INDEXED_TABLE_MUTABLE where (CORE &lt; 10 or CORE &gt; 90) group by round(date, 'day',50), host" queryGroup="Index"/>
+                <query id="mut_7" useGlobalConnection="true" statement="select count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,100)" queryGroup="Index"/>
+                <query id="mut_8" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  midx1 midx2 midx3 midx4) */ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,100)" queryGroup="Index"/>
+                <query id="mut_9" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  mids1 mids2 mids3 mids4) */ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,100)" queryGroup="Index"/>
+                <query id="mut_10" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,100)" queryGroup="Index"/>
+                <query id="mut_11" useGlobalConnection="true" statement="select count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,25,50,75,100)" queryGroup="Index"/>
+                <query id="mut_12" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  midx1 midx2 midx3 midx4) */ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,25,50,75,100)" queryGroup="Index"/>
+                <query id="mut_13" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  mids1 mids2 mids3 mids4) */ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,25,50,75,100)" queryGroup="Index"/>
+                <query id="mut_14" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core IN (1,25,50,75,100)" queryGroup="Index"/>
+                <query id="mut_15" useGlobalConnection="true" statement="select count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &lt; 10 and db &lt; 200" queryGroup="Index"/>
+                <query id="mut_16" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  midx1 midx2 midx3 midx4) */ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &lt; 10 and db &lt; 200" queryGroup="Index"/>
+                <query id="mut_17" useGlobalConnection="true" statement="select /*+ INDEX(PHERF.INDEXED_TABLE_MUTABLE  mids1 mids2 mids3 mids4) */ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &lt; 10 and db &lt; 200" queryGroup="Index"/>
+                <query id="mut_18" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &lt; 10 and db &lt; 200" queryGroup="Index"/>
+                <query id="mut_19" useGlobalConnection="true" statement="select count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &lt; 100 and db &lt; 2000" queryGroup="Index"/>
+                <query id="mut_20" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &lt; 100 and db &lt; 2000" queryGroup="Index"/>
+                <query id="mut_21" useGlobalConnection="true" statement="select count(core) from PHERF.INDEXED_TABLE_MUTABLE where core > 90" queryGroup="Index"/>
+                <query id="mut_22" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &gt; 90" queryGroup="Index"/>
+                <query id="mut_23" useGlobalConnection="true" statement="select count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &gt; 0" queryGroup="Index"/>
+                <query id="mut_24" useGlobalConnection="true" statement="select /*+NO_INDEX*/ count(core) from PHERF.INDEXED_TABLE_MUTABLE where core &gt; 0" queryGroup="Index"/>
+                <query id="mut_25" useGlobalConnection="true" statement="select db from PHERF.INDEXED_TABLE_MUTABLE where db &gt; 5 and db &lt; 7 order by db" queryGroup="Index"/>
+                <query id="mut_26" useGlobalConnection="true" statement="select /*+NO_INDEX*/ db from PHERF.INDEXED_TABLE_MUTABLE where db &gt; 5 and db &lt; 7 order by db" queryGroup="Index"/>
+                <query id="mut_27" useGlobalConnection="true" statement="select db from PHERF.INDEXED_TABLE_MUTABLE order by db limit 10" queryGroup="Index"/>
+                <query id="mut_28" useGlobalConnection="true" statement="select /*+NO_INDEX*/ db from PHERF.INDEXED_TABLE_MUTABLE order by db limit 10" queryGroup="Index"/>
+            </querySet>
+        </scenario>
+    </scenarios>
+</datamodel>

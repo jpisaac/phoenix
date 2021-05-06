@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License"); you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="WL_AGGREGATION_TABLE_MODEL">
+    <datamapping>
+        <column>
+            <type>CHAR</type>
+            <length>2</length>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>HOST</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["NA","CS","EU"] -->
+                <datavalue distribution="34">
+                    <value>NA</value>
+                </datavalue>
+                <datavalue distribution="33">
+                    <value>CS</value>
+                </datavalue>
+                <datavalue distribution="33">
+                    <value>EU</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>DOMAIN</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Salesforce.com","Apple.com","Google.com","Amazon.com"]-->
+                <datavalue distribution="25">
+                    <value>Salesforce.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Apple.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Google.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Amazon.com</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>FEATURE</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Login","Report","Dashboard","Sales","UI"]-->
+                <datavalue distribution="20">
+                    <value>Login</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Report</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Dashboard</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Sales</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>UI</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>DATE</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>DATE</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <userDefined>true</userDefined>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <minValue>2020</minValue>
+            <maxValue>2025</maxValue>
+            <name>DATE_O</name>
+        </column>
+
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>USAGE.CORE</name>
+        </column>
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>2000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>USAGE.DB</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>10000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>STATS.ACTIVE_VISITOR</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.AGGREGATION_TABLE" name="WL_AGG_TABLE_WRITE" generatorName="WEIGHTED">
+            <loadProfile>
+                <batchSize>10</batchSize>
+                <numOperations>200</numOperations>
+                <tenantDistribution id="GLOBAL" weight="100" numTenants="1"></tenantDistribution>
+                <opDistribution id="agg_w1" weight="100"></opDistribution>
+            </loadProfile>
+
+            <upserts>
+                <upsert id="agg_w1" useGlobalConnection="true" upsertGroup="write"/>
+            </upserts>
+        </scenario>
+        <scenario tableName="PHERF.AGGREGATION_TABLE" name="WL_AGG_TABLE_READ" generatorName="WEIGHTED">
+            <loadProfile>
+                <numOperations>50</numOperations>
+                <tenantDistribution id="GLOBAL" weight="100" numTenants="1"></tenantDistribution>
+                <opDistribution id="agg_r1" weight="0"></opDistribution>
+                <opDistribution id="agg_r2" weight="0"></opDistribution>
+                <opDistribution id="agg_r3" weight="0"></opDistribution>
+                <opDistribution id="agg_r4" weight="0"></opDistribution>
+                <opDistribution id="agg_r5" weight="0"></opDistribution>
+                <opDistribution id="agg_r6" weight="0"></opDistribution>
+                <opDistribution id="agg_r7" weight="0"></opDistribution>
+                <opDistribution id="agg_r8" weight="0"></opDistribution>
+                <opDistribution id="agg_r9" weight="0"></opDistribution>
+                <opDistribution id="agg_r10" weight="0"></opDistribution>
+                <opDistribution id="agg_r11" weight="0"></opDistribution>
+                <opDistribution id="agg_r12" weight="0"></opDistribution>
+                <opDistribution id="agg_r13" weight="0"></opDistribution>
+                <opDistribution id="agg_r14" weight="0"></opDistribution>
+                <opDistribution id="agg_r15" weight="0"></opDistribution>
+                <opDistribution id="agg_r16" weight="0"></opDistribution>
+                <opDistribution id="agg_r17" weight="0"></opDistribution>
+                <opDistribution id="agg_r18" weight="0"></opDistribution>
+                <opDistribution id="agg_r19" weight="0"></opDistribution>
+                <opDistribution id="agg_r20" weight="0"></opDistribution>
+                <opDistribution id="agg_r21" weight="0"></opDistribution>
+                <opDistribution id="agg_r22" weight="0"></opDistribution>
+            </loadProfile>
+
+            <querySet>
+                <query id="agg_r1" useGlobalConnection="true" statement="select count(*) from PHERF.AGGREGATION_TABLE" queryGroup="Aggregation"/>
+                <query id="agg_r2" useGlobalConnection="true" statement="select count(1) from PHERF.AGGREGATION_TABLE group by HOST" queryGroup="Aggregation"/>
+                <query id="agg_r3" useGlobalConnection="true" statement="select core, count(1) from PHERF.AGGREGATION_TABLE group by CORE" queryGroup="Aggregation"/>
+                <query id="agg_r4" useGlobalConnection="true" statement="select core, host, sum(ACTIVE_VISITOR) from PHERF.AGGREGATION_TABLE group by core, host" queryGroup="Aggregation"/>
+                <query id="agg_r5" useGlobalConnection="true" statement="select AVG(DB), MIN(CORE), MAX(ACTIVE_VISITOR) from PHERF.AGGREGATION_TABLE where host='CS' and DOMAIN &lt;&gt; 'Google.com'" queryGroup="Aggregation"/>
+                <query id="agg_r6" useGlobalConnection="true" statement="select round(date, 'day',50), sum(core)+2 from PHERF.AGGREGATION_TABLE where (CORE &lt; 10 or CORE &gt; 90) group by round(date, 'day',50), host" queryGroup="Aggregation"/>
+                <query id="agg_r7" useGlobalConnection="true" statement="select trunc(date, 'hour', 1000), count(DB), count(ACTIVE_VISITOR) from PHERF.AGGREGATION_TABLE where feature='Login' and (core &lt; 50 or db &lt; 20 or active_visitor &gt; 200) group by trunc(date, 'hour', 1000)" queryGroup="Aggregation"/>
+                <query id="agg_r8" useGlobalConnection="true" statement="select count(active_visitor) count from PHERF.AGGREGATION_TABLE" queryGroup="Aggregation"/>
+                <query id="agg_r9" useGlobalConnection="true" statement="select count(distinct active_visitor) count from PHERF.AGGREGATION_TABLE" queryGroup="Aggregation"/>
+                <query id="agg_r10" useGlobalConnection="true" statement="select percentile_cont(0.9) within group (order by active_visitor asc) from PHERF.AGGREGATION_TABLE" queryGroup="Percentile"/>
+                <query id="agg_r11" useGlobalConnection="true" statement="select percentile_cont(0.1) within group (order by active_visitor desc) from PHERF.AGGREGATION_TABLE" queryGroup="Percentile"/>
+                <query id="agg_r12" useGlobalConnection="true" statement="select count(core), count(db), count(active_visitor) from PHERF.AGGREGATION_TABLE" queryGroup="Aggregation"/>
+                <query id="agg_r13" useGlobalConnection="true" statement="select count(distinct core), count(distinct db), count(distinct active_visitor) from PHERF.AGGREGATION_TABLE" queryGroup="Count Distinct"/>
+                <query id="agg_r14" useGlobalConnection="true" statement="select percentile_cont(0.5) within group (order by core asc), percentile_cont(0.5) within group (order by db asc), percentile_cont(0.5) within group (order by active_visitor asc) from PHERF.AGGREGATION_TABLE" queryGroup="Percentile"/>
+                <query id="agg_r15" useGlobalConnection="true" statement="select core, count(db) count from PHERF.AGGREGATION_TABLE group by CORE" queryGroup="Aggregation"/>
+                <query id="agg_r16" useGlobalConnection="true" statement="select core, count(distinct db) count from PHERF.AGGREGATION_TABLE group by CORE" queryGroup="Count Distinct"/>
+                <query id="agg_r17" useGlobalConnection="true" statement="select core, percentile_cont(0.9999) within group (order by db asc) from PHERF.AGGREGATION_TABLE group by CORE" queryGroup="Percentile"/>
+                <query id="agg_r18" useGlobalConnection="true" statement="select count(core) from PHERF.AGGREGATION_TABLE where core IN (1,25,50,75,100)" queryGroup="IN/LIKE Clause"/>
+                <query id="agg_r19" useGlobalConnection="true" statement="select count(core) from PHERF.AGGREGATION_TABLE where core &lt; 10 and db &lt; 200" queryGroup="Aggregation"/>
+                <query id="agg_r20" useGlobalConnection="true" statement="select count(core) from PHERF.AGGREGATION_TABLE where core &lt; 10 and active_visitor &lt; 1000" queryGroup="Aggregation"/>
+                <query id="agg_r21" useGlobalConnection="true" statement="select * from PHERF.AGGREGATION_TABLE LIMIT 100" queryGroup="LIMIT"/>
+                <query id="agg_r22" useGlobalConnection="true" statement="select count(core) from PHERF.AGGREGATION_TABLE where core &gt; 90" queryGroup="Aggregation"/>
+            </querySet>
+        </scenario>
+    </scenarios>
+</datamodel>
