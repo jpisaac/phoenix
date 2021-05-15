@@ -36,7 +36,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.query.BaseTest;
@@ -96,7 +96,7 @@ public class SchemaReaderIT extends BaseTest {
             assertNotNull("Test data XML file is missing", resourceUrl);
             connection = util.getConnection();
             Path resourcePath = Paths.get(resourceUrl.toURI());
-            DataModel data = XMLConfigParser.readDataModel(resourcePath);
+            DataModel data = ScenarioParser.readDataModel(resourcePath);
             List<Scenario> scenarioList = data.getScenarios();
             Scenario scenario = scenarioList.get(0);
             List<Column>

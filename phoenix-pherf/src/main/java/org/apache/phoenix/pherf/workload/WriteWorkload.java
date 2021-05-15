@@ -18,13 +18,9 @@
 
 package org.apache.phoenix.pherf.workload;
 
-import java.math.BigDecimal;
-import java.sql.Array;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,13 +34,12 @@ import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.configuration.WriteParams;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.exception.PherfException;
 import org.apache.phoenix.pherf.result.DataLoadThreadTime;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
 import org.apache.phoenix.pherf.result.ResultUtil;
-import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.RowCalculator;
@@ -58,7 +53,7 @@ public class WriteWorkload implements Workload {
     public static final String USE_BATCH_API_PROPERTY = "pherf.default.dataloader.batchApi";
 
     private final PhoenixUtil pUtil;
-    private final XMLConfigParser parser;
+    private final ScenarioParser parser;
     private final RulesApplier rulesApplier;
     private final ResultUtil resultUtil;
     private final ExecutorService pool;
@@ -71,19 +66,19 @@ public class WriteWorkload implements Workload {
     private final GeneratePhoenixStats generateStatistics;
     private final boolean useBatchApi;
 
-    public WriteWorkload(XMLConfigParser parser) throws Exception {
+    public WriteWorkload(ScenarioParser parser) throws Exception {
         this(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
     }
     
-    public WriteWorkload(XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(ScenarioParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
         this(PhoenixUtil.create(), parser, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil util, ScenarioParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
         this(util, parser, null, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
+    public WriteWorkload(PhoenixUtil phoenixUtil, ScenarioParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
             throws Exception {
         this(phoenixUtil,
                 PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
@@ -98,12 +93,12 @@ public class WriteWorkload implements Workload {
      *
      * @param phoenixUtil {@link org.apache.phoenix.pherf.util.PhoenixUtil} Query helper
      * @param properties  {@link java.util.Properties} default properties to use
-     * @param parser      {@link org.apache.phoenix.pherf.configuration.XMLConfigParser}
+     * @param parser      {@link ScenarioParser}
      * @param scenario    {@link org.apache.phoenix.pherf.configuration.Scenario} If null is passed
      *                    it will run against all scenarios in the parsers list.
      * @throws Exception
      */
-    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
+    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, ScenarioParser parser,
             Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
@@ -362,7 +357,7 @@ public class WriteWorkload implements Workload {
         return future;
     }
 
-    public XMLConfigParser getParser() {
+    public ScenarioParser getParser() {
         return parser;
     }
 

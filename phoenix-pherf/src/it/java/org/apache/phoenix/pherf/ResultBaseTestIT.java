@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -44,7 +44,7 @@ public class ResultBaseTestIT extends ParallelStatsDisabledIT {
     protected static PhoenixUtil util = PhoenixUtil.create(true);
     protected static Properties properties;
     protected static SchemaReader reader;
-    protected static XMLConfigParser parser;
+    protected static ScenarioParser parser;
     protected static List<Path> resources;
     protected static ResultUtil resultUtil = new ResultUtil();
 
@@ -62,7 +62,7 @@ public class ResultBaseTestIT extends ParallelStatsDisabledIT {
 
         PhoenixUtil.setZookeeper("localhost");
         reader = new SchemaReader(util, matcherSchema);
-        parser = new XMLConfigParser(matcherScenario);
+        parser = new ScenarioParser(matcherScenario);
 
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }

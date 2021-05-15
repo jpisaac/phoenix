@@ -51,7 +51,7 @@ public class RulesApplier {
     private final RandomDataGenerator randomDataGenerator;
 
     private final DataModel dataModel;
-    private final XMLConfigParser parser;
+    private final ScenarioParser parser;
     private final List<Map> modelList;
     private final Map<String, Column> columnMap;
     private String cachedScenarioOverrideName;
@@ -62,7 +62,7 @@ public class RulesApplier {
     // Since rules are only relevant for a given data model,
     // added a constructor to support a single data model => RulesApplier(DataModel model)
 
-    // We should deprecate the RulesApplier(XMLConfigParser parser) constructor,
+    // We should deprecate the RulesApplier(ScenarioParser parser) constructor,
     // since a parser can have multiple data models (all the models found on the classpath)
     // it implies that the rules apply to all the data models the parser holds
     // which can be confusing to the user of this class.
@@ -84,11 +84,11 @@ public class RulesApplier {
         populateModelList();
     }
 
-    public RulesApplier(XMLConfigParser parser) {
+    public RulesApplier(ScenarioParser parser) {
         this(parser, EnvironmentEdgeManager.currentTimeMillis());
     }
 
-    public RulesApplier(XMLConfigParser parser, long seed) {
+    public RulesApplier(ScenarioParser parser, long seed) {
         this.parser = parser;
         this.dataModel = null;
         this.modelList = new ArrayList<Map>();
@@ -453,7 +453,7 @@ public class RulesApplier {
         // Since rules are only relevant for a given data model,
         // added a constructor to support a single data model => RulesApplier(DataModel model)
 
-        // We should deprecate the RulesApplier(XMLConfigParser parser) constructor,
+        // We should deprecate the RulesApplier(ScenarioParser parser) constructor,
         // since a parser can have multiple data models (all the models found on the classpath)
         // it implies that the rules apply to all the data models the parser holds
         // which can be confusing to the user of this class.

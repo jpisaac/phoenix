@@ -38,7 +38,7 @@ import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.DataSequence;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
@@ -53,7 +53,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testDateGenerator() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
@@ -81,7 +81,7 @@ public class RuleGeneratorTest {
     //Test to check the current date is generated correctly between the timestamps at column level and datavalue level
     @Test
     public void testCurrentDateGenerator() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
@@ -139,7 +139,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testNullChance() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
@@ -167,7 +167,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testSequentialDataSequence() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
@@ -186,7 +186,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testSequentialIntegerDataSequence() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
@@ -274,7 +274,7 @@ public class RuleGeneratorTest {
     public void testTimestampRule() throws Exception {
     	SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     	SimpleDateFormat df = new SimpleDateFormat("yyyy");
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
@@ -295,7 +295,7 @@ public class RuleGeneratorTest {
     @Test
     public void testVarcharArray() throws Exception {
 
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         
@@ -314,7 +314,7 @@ public class RuleGeneratorTest {
             expectedValues.add("VBOxx00" + i);
         }
 
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         
@@ -340,7 +340,7 @@ public class RuleGeneratorTest {
         expectedValues.add("0F90000000000X8");
         expectedValues.add("0F90000000000X9");
 
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         
@@ -358,7 +358,7 @@ public class RuleGeneratorTest {
         expectedValues.add("bBByYhnNbBs9kWu");
         expectedValues.add("cCCyYhnNbBs9kWr");
 
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
@@ -376,7 +376,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testRuleOverrides() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
@@ -418,7 +418,7 @@ public class RuleGeneratorTest {
     
     @Test
     public void testScenarioLevelRuleOverride() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        ScenarioParser parser = new ScenarioParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);

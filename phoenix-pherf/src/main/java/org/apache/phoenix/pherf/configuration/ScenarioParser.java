@@ -40,16 +40,16 @@ import org.apache.phoenix.pherf.util.ResourceList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class XMLConfigParser {
+public class ScenarioParser {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(XMLConfigParser.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ScenarioParser.class);
     private String filePattern;
     private List<DataModel> dataModels;
     private List<Scenario> scenarios = null;
     private ResourceList resourceList;
     private Collection<Path> paths = null;
 
-    public XMLConfigParser(String pattern) throws Exception {
+    public ScenarioParser(String pattern) throws Exception {
         init(pattern);
     }
 
@@ -91,7 +91,7 @@ public class XMLConfigParser {
         scenarios = Collections.synchronizedList(new ArrayList<Scenario>());
         for (Path path : getPaths(getFilePattern())) {
             try {
-                List<Scenario> scenarioList = XMLConfigParser.readDataModel(path).getScenarios();
+                List<Scenario> scenarioList = ScenarioParser.readDataModel(path).getScenarios();
                 for (Scenario scenario : scenarioList) {
                     scenarios.add(scenario);
                 }
@@ -124,7 +124,7 @@ public class XMLConfigParser {
         String fName = PherfConstants.RESOURCE_SCENARIO + "/" + file.getFileName().toString();
         LOGGER.info("Open config file: " + fName);
         XMLStreamReader xmlReader = xif.createXMLStreamReader(
-            new StreamSource(XMLConfigParser.class.getResourceAsStream(fName)));
+            new StreamSource(ScenarioParser.class.getResourceAsStream(fName)));
         return (DataModel) jaxbUnmarshaller.unmarshal(xmlReader);
     }
 
@@ -176,7 +176,7 @@ public class XMLConfigParser {
         }
         for (Path path : this.paths) {
             System.out.println("Adding model for path:" + path.toString());
-            this.dataModels.add(XMLConfigParser.readDataModel(path));
+            this.dataModels.add(ScenarioParser.readDataModel(path));
         }
     }
 

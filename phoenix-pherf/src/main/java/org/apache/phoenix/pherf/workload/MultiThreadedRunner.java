@@ -25,6 +25,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.Callable;
 
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.pherf.result.DataModelResult;
@@ -38,8 +39,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.WriteParams;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 class MultiThreadedRunner implements Callable<Void> {
@@ -56,7 +55,7 @@ class MultiThreadedRunner implements Callable<Void> {
     private final RulesApplier ruleApplier;
     private final Scenario scenario;
     private final WorkloadExecutor workloadExecutor;
-    private final XMLConfigParser parser;
+    private final ScenarioParser parser;
     private final boolean writeRuntimeResults;
 
     /**
@@ -71,7 +70,7 @@ class MultiThreadedRunner implements Callable<Void> {
      * @param ruleRunner 
      */
     MultiThreadedRunner(String threadName, Query query, DataModelResult dataModelResult,
-            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs, boolean writeRuntimeResults, RulesApplier ruleApplier, Scenario scenario, WorkloadExecutor workloadExecutor, XMLConfigParser parser) {
+            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs, boolean writeRuntimeResults, RulesApplier ruleApplier, Scenario scenario, WorkloadExecutor workloadExecutor, ScenarioParser parser) {
         this.query = query;
         this.threadName = threadName;
         this.threadTime = threadTime;
