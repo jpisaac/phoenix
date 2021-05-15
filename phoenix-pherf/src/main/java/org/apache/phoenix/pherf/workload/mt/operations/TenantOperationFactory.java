@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf.workload.mt.operations;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.workload.mt.generators.LoadEventGenerator;
 import org.apache.phoenix.pherf.workload.mt.MultiTenantWorkload;
 import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
@@ -41,7 +42,6 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.configuration.Upsert;
 import org.apache.phoenix.pherf.configuration.UserDefined;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
@@ -100,7 +100,7 @@ public class TenantOperationFactory {
     private final PhoenixUtil phoenixUtil;
     private final DataModel model;
     private final Scenario scenario;
-    private final XMLConfigParser parser;
+    private final ScenarioParser parser;
 
     private final RulesApplier rulesApplier;
     private final LoadProfile loadProfile;

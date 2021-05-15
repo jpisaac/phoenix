@@ -20,12 +20,12 @@ package org.apache.phoenix.pherf.workload.mt;
 
 import com.lmax.disruptor.LifecycleAware;
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.XMLConfigParserTest;
+import org.apache.phoenix.pherf.ScenarioParserTest;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -99,10 +99,10 @@ public class MultiTenantTestUtils {
     }
 
     public DataModel readTestDataModel(String resourceName) throws Exception {
-        URL scenarioUrl = XMLConfigParserTest.class.getResource(resourceName);
+        URL scenarioUrl = ScenarioParserTest.class.getResource(resourceName);
         assertNotNull(scenarioUrl);
         Path p = Paths.get(scenarioUrl.toURI());
-        return XMLConfigParser.readDataModel(p);
+        return ScenarioParser.readDataModel(p);
     }
 
     public void testWorkloadWithCountingHandlers(Properties properties, DataModel model,
