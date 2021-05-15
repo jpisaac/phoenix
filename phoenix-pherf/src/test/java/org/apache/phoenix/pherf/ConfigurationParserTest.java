@@ -153,7 +153,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
         }
 
         Scenario testScenarioWithLoadProfile = scenarioList.get(0);
-        Map<String, String> props = testScenarioWithLoadProfile.getPhoenixProperties();
+        Map<String, String> props = testScenarioWithLoadProfile.getScenarioProperties();
         assertEquals("Number of properties(size) not as expected: ",
                 2, props.size());
         TenantLoadEventGeneratorFactory.GeneratorType
@@ -294,8 +294,8 @@ public class ConfigurationParserTest extends ResultBaseTest {
         	preScenarioDdls.add(new Ddl("CREATE INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER) ASYNC", "FHAIDX_NEWVAL_NUMBER"));
         	preScenarioDdls.add(new Ddl("CREATE LOCAL INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER)", "FHAIDX_NEWVAL_NUMBER"));
 			scenario.setPreScenarioDdls(preScenarioDdls);
-            scenario.setPhoenixProperties(new HashMap<String, String>());
-            scenario.getPhoenixProperties().put("phoenix.query.threadPoolSize", "200");
+            scenario.setScenarioProperties(new HashMap<String, String>());
+            scenario.getScenarioProperties().put("phoenix.query.threadPoolSize", "200");
             scenario.setDataOverride(new DataOverride());
             scenario.setTableName("tableName");
             scenario.setRowCount(10);
@@ -310,7 +310,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
             query.setStatement("select * from FHA");
             Scenario scenario2 = new Scenario();
             scenario2.setName("scenario2");
-            scenario2.setPhoenixProperties(new HashMap<String, String>());
+            scenario2.setScenarioProperties(new HashMap<String, String>());
             scenario2.setDataOverride(new DataOverride());
             scenario2.setTableName("tableName2");
             scenario2.setRowCount(500);

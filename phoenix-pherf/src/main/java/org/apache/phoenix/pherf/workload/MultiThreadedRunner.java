@@ -157,7 +157,7 @@ class MultiThreadedRunner implements Callable<Void> {
         Long queryElapsedTime = 0L;
 
         try {
-            conn = pUtil.getConnection(query.getTenantId(), scenario.getPhoenixProperties());
+            conn = pUtil.getConnection(query.getTenantId(), scenario.getScenarioProperties());
             conn.setAutoCommit(true);
             final String statementString = query.getDynamicStatement(ruleApplier, scenario);
             statement = conn.prepareStatement(statementString);
