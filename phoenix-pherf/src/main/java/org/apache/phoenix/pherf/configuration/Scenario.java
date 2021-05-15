@@ -35,7 +35,7 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 public class Scenario {
     private String tableName;
     private int rowCount;
-    private Map<String, String> phoenixProperties;
+    private Map<String, String> scenarioProperties;
     private WriteParams writeParams = null;
     private DataOverride dataOverride;
     private List<QuerySet> querySet = new ArrayList<>();
@@ -123,12 +123,12 @@ public class Scenario {
      *
      * @return
      */
-    public Map<String, String> getPhoenixProperties() {
-        return phoenixProperties;
+    public Map<String, String> getScenarioProperties() {
+        return scenarioProperties;
     }
 
-    public void setPhoenixProperties(Map<String, String> phoenixProperty) {
-        this.phoenixProperties = phoenixProperty;
+    public void setScenarioProperties(Map<String, String> properties) {
+        this.scenarioProperties = properties;
     }
 
     /**

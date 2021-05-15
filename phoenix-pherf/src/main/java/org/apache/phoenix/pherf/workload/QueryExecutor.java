@@ -156,7 +156,7 @@ public class QueryExecutor implements Workload {
 
                     for (Scenario scenario : scenarios) {
                         ScenarioResult scenarioResult = new ScenarioResult(scenario);
-                        scenarioResult.setPhoenixProperties(phoenixProperty);
+                        scenarioResult.setScenarioProperties(phoenixProperty);
                         dataModelResult.getScenarioResult().add(scenarioResult);
 
                         for (QuerySet querySet : scenario.getQuerySet()) {

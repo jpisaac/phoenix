@@ -37,7 +37,7 @@
                 <userDefined>true</userDefined>
             </column>
         </dataOverride>
-        <phoenixProperties>
+        <scenarioProperties>
             <entry>
                 <key>phoenix.schema.isNamespaceMappingEnabled</key>
                 <value>false</value>
@@ -50,7 +50,7 @@
                 <key>phoenix.queryserver.http.port</key>
                 <value>8765</value>
             </entry>
-        </phoenixProperties>
+        </scenarioProperties>
         <writeParams executionDurationInMs="9223372036854775807">
             <batchSize>-9223372036854775808</batchSize>
             <threadSleepDuration>-9223372036854775808</threadSleepDuration>

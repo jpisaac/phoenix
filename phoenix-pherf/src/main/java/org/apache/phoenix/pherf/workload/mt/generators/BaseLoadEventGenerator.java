@@ -114,8 +114,8 @@ public abstract class BaseLoadEventGenerator
 
 
         operationFactory = new TenantOperationFactory(phoenixUtil, model, scenario);
-        if (scenario.getPhoenixProperties() != null) {
-            properties.putAll(scenario.getPhoenixProperties());
+        if (scenario.getScenarioProperties() != null) {
+            properties.putAll(scenario.getScenarioProperties());
         }
         this.properties = properties;
 

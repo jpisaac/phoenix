@@ -228,7 +228,7 @@ public class ResultUtil {
                                     String.valueOf(querySetResult.getNumberOfExecutions()))));
                             valueList.add(new ResultValue(convertNull(
                                     String.valueOf(querySetResult.getExecutionType()))));
-                            if (result.getPhoenixProperties() != null) {
+                            if (result.getScenarioProperties() != null) {
                                 String props = buildProperty(result);
                                 valueList.add(new ResultValue(convertNull(props)));
                             } else {
@@ -251,7 +251,7 @@ public class ResultUtil {
         StringBuffer sb = new StringBuffer();
         boolean firstPartialSeparator = true;
 
-        for (Map.Entry<String, String> entry : result.getPhoenixProperties().entrySet()) {
+        for (Map.Entry<String, String> entry : result.getScenarioProperties().entrySet()) {
             if (!firstPartialSeparator) sb.append("|");
             firstPartialSeparator = false;
             sb.append(entry.getKey() + "=" + entry.getValue());
