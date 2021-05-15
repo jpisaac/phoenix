@@ -40,7 +40,7 @@ public class ScenarioResult extends Scenario {
 
     public ScenarioResult(Scenario scenario) {
         this.setDataOverride(scenario.getDataOverride());
-        this.setPhoenixProperties(scenario.getPhoenixProperties());
+        this.setScenarioProperties(scenario.getScenarioProperties());
         this.setRowCount(scenario.getRowCount());
         this.setTableName(scenario.getTableName());
         this.setName(scenario.getName());

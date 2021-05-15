@@ -188,7 +188,7 @@ public class MultiTenantTestUtils {
 
                 Map<String, String> scenarioProperties = Maps.newHashMap();
                 scenarioProperties.put("pherf.mt.handlers_per_scenario", String.valueOf(numHandlers));
-                scenario.setPhoenixProperties(scenarioProperties);
+                scenario.setScenarioProperties(scenarioProperties);
                 LOGGER.debug(String.format("Testing %s", scenario.getName()));
                 LoadProfile loadProfile = scenario.getLoadProfile();
 
