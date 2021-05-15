@@ -27,21 +27,21 @@ import java.nio.file.Paths;
 import javax.xml.bind.UnmarshalException;
 import javax.xml.stream.XMLStreamException;
 
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class XMLConfigParserTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(XMLConfigParserTest.class);
+public class ScenarioParserTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ScenarioParserTest.class);
   
     @Test
     public void testDTDInScenario() throws Exception {
-        URL scenarioUrl = XMLConfigParserTest.class.getResource("/scenario/malicious_scenario_with_dtd.xml");
+        URL scenarioUrl = ScenarioParserTest.class.getResource("/scenario/malicious_scenario_with_dtd.xml");
         assertNotNull(scenarioUrl);
         Path p = Paths.get(scenarioUrl.toURI());
         try {
-            XMLConfigParser.readDataModel(p);
+            ScenarioParser.readDataModel(p);
             fail("The scenario should have failed to parse because it contains a DTD");
         } catch (UnmarshalException e) {
             // If we don't parse the DTD, the variable 'name' won't be defined in the XML

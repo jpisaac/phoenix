@@ -165,7 +165,7 @@ public class Scenario {
      * @return
      */
     public String getSchemaName() {
-        return XMLConfigParser.parseSchemaName(this.tableName);
+        return ScenarioParser.parseSchemaName(this.tableName);
     }
 
     /**
@@ -174,7 +174,7 @@ public class Scenario {
      * @return
      */
     public String getTableNameWithoutSchemaName() {
-        return XMLConfigParser.parseTableName(this.tableName);
+        return ScenarioParser.parseTableName(this.tableName);
     }
 
     /**

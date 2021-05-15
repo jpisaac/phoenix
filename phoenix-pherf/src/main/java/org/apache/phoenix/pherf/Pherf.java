@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
@@ -36,7 +37,6 @@ import org.apache.phoenix.pherf.PherfConstants.CompareType;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
@@ -314,7 +314,7 @@ public class Pherf {
                 return;
             }
 
-            XMLConfigParser parser = new XMLConfigParser(scenarioFile);
+            ScenarioParser parser = new ScenarioParser(scenarioFile);
             if (monitor) {
                 monitorManager =
                         new MonitorManager(Integer.parseInt(

@@ -20,11 +20,11 @@
 package org.apache.phoenix.pherf.workload.mt;
 
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.XMLConfigParserTest;
+import org.apache.phoenix.pherf.ScenarioParserTest;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.generators.SequentialLoadEventGenerator;
 import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
@@ -58,10 +58,10 @@ public class SequentialLoadEventGeneratorTest {
     }
 
     public DataModel readTestDataModel(String resourceName) throws Exception {
-        URL scenarioUrl = XMLConfigParserTest.class.getResource(resourceName);
+        URL scenarioUrl = ScenarioParserTest.class.getResource(resourceName);
         assertNotNull(scenarioUrl);
         Path p = Paths.get(scenarioUrl.toURI());
-        return XMLConfigParser.readDataModel(p);
+        return ScenarioParser.readDataModel(p);
     }
 
     @Test

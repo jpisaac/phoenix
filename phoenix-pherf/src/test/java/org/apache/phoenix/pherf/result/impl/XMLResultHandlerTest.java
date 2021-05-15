@@ -26,7 +26,7 @@ import java.net.URL;
 import javax.xml.bind.UnmarshalException;
 import javax.xml.stream.XMLStreamException;
 
-import org.apache.phoenix.pherf.XMLConfigParserTest;
+import org.apache.phoenix.pherf.ScenarioParserTest;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +36,7 @@ public class XMLResultHandlerTest {
 
     @Test
     public void testDTDInResults() throws Exception {
-        URL resultsUrl = XMLConfigParserTest.class.getResource("/malicious_results_with_dtd.xml");
+        URL resultsUrl = ScenarioParserTest.class.getResource("/malicious_results_with_dtd.xml");
         assertNotNull(resultsUrl);
         File resultsFile = new File(resultsUrl.getFile());
         XMLResultHandler handler = new XMLResultHandler();

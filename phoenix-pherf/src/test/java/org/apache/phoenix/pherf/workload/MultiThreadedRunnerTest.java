@@ -21,7 +21,7 @@ package org.apache.phoenix.pherf.workload;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.ThreadTime;
 import org.apache.phoenix.pherf.rules.RulesApplier;
@@ -41,7 +41,7 @@ import static org.junit.Assert.fail;
 
 public class MultiThreadedRunnerTest {
     @Mock
-    private static XMLConfigParser mockParser;
+    private static ScenarioParser mockParser;
     @Mock
     private static DataModelResult mockDMR;
     @Mock

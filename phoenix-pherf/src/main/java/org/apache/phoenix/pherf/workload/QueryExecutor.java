@@ -25,7 +25,7 @@ import org.apache.phoenix.pherf.configuration.ExecutionType;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.QuerySet;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.QueryResult;
 import org.apache.phoenix.pherf.result.QuerySetResult;
@@ -49,24 +49,24 @@ public class QueryExecutor implements Workload {
     private List<DataModel> dataModels;
     private String queryHint;
     private final boolean exportCSV;
-    private final XMLConfigParser parser;
+    private final ScenarioParser parser;
     private final PhoenixUtil util;
     private final WorkloadExecutor workloadExecutor;
     private final boolean writeRuntimeResults;
     private RulesApplier ruleApplier;
 
-    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
+    public QueryExecutor(ScenarioParser parser, PhoenixUtil util,
             WorkloadExecutor workloadExecutor) {
         this(parser, util, workloadExecutor, parser.getDataModels(), null, false, true);
     }
 
-    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
+    public QueryExecutor(ScenarioParser parser, PhoenixUtil util,
             WorkloadExecutor workloadExecutor, List<DataModel> dataModels, String queryHint,
             boolean exportCSV) {
     	this(parser, util, workloadExecutor, dataModels, queryHint, exportCSV, true);
     }
 
-    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
+    public QueryExecutor(ScenarioParser parser, PhoenixUtil util,
             WorkloadExecutor workloadExecutor, List<DataModel> dataModels, String queryHint,
             boolean exportCSV, boolean writeRuntimeResults) {
         this.parser = parser;

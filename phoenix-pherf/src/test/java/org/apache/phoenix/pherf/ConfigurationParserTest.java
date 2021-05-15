@@ -35,12 +35,12 @@ import org.apache.phoenix.pherf.configuration.Ddl;
 import org.apache.phoenix.pherf.configuration.ExecutionType;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.configuration.WriteParams;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.workload.mt.generators.TenantLoadEventGeneratorFactory;
 import org.junit.Test;
@@ -227,7 +227,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
 
     private DataModel getDataModel(String resourceName) throws Exception {
         Path resourcePath = Paths.get(getResourceUrl(resourceName).toURI());
-        return XMLConfigParser.readDataModel(resourcePath);
+        return ScenarioParser.readDataModel(resourcePath);
     }
 
     private void assertDateValue(List<Column> dataMappingColumns) {
