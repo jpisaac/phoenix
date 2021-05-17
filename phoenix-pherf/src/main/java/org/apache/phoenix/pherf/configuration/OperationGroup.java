@@ -23,6 +23,7 @@ import javax.xml.bind.annotation.XmlAttribute;
 public class OperationGroup {
     private String id;
     private int weight;
+    private boolean useGlobalConnection;
 
     @XmlAttribute
     public String getId() {
@@ -41,4 +42,14 @@ public class OperationGroup {
     public void setWeight(int weight) {
         this.weight = weight;
     }
+
+    @XmlAttribute
+    public boolean isUseGlobalConnection() {
+        return useGlobalConnection;
+    }
+
+    public void setUseGlobalConnection(boolean useGlobalConnection) {
+        this.useGlobalConnection = useGlobalConnection;
+    }
+
 }

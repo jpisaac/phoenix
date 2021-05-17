@@ -207,8 +207,6 @@ public class ConfigurationParserTest extends ResultBaseTest {
                 1, testScenarioWithGlobalConn.getUpserts().size());
         assertEquals("#Column within the first upsert is not as expected ",
                 7, testScenarioWithGlobalConn.getUpserts().get(0).getColumn().size());
-        assertEquals("Upsert operation not using global connection as expected ",
-                true, testScenarioWithGlobalConn.getUpserts().get(0).isUseGlobalConnection());
     }
 
     private URL getResourceUrl(String resourceName) {

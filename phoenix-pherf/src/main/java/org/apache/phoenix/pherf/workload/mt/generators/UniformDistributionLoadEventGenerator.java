@@ -20,6 +20,7 @@ package org.apache.phoenix.pherf.workload.mt.generators;
 
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
+import org.apache.phoenix.pherf.configuration.OperationGroup;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -27,7 +28,10 @@ import org.apache.phoenix.pherf.workload.mt.operations.Operation;
 import org.apache.phoenix.pherf.workload.mt.handlers.PherfWorkHandler;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
@@ -45,6 +49,7 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
 
         private final TenantGroup tenantGroup;
         private final List<Operation> operationList;
+        private final Map<String, OperationGroup> opGroupMap = Maps.newHashMap();
 
         public UniformDistributionSampler(List<Operation> operationList, DataModel model,
                 Scenario scenario) {
@@ -66,6 +71,14 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
                     "Tenant group cannot be more than 1");
             tenantGroup = loadProfile.getTenantDistribution().get(0);
 
+            for (OperationGroup loadOp : loadProfile.getOpDistribution()) {
+                for (Operation op : operationList) {
+                    if (op.getId().compareTo(loadOp.getId()) == 0) {
+                        opGroupMap.put(loadOp.getId(), loadOp);
+                    }
+                }
+            }
+
             this.distribution = new Random();
         }
 
@@ -73,7 +86,11 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
             int sampleIndex = this.distribution.nextInt(operationList.size());
             Operation op = operationList.get(sampleIndex);
 
+            OperationGroup og = opGroupMap.get(op.getId());
+            Preconditions.checkNotNull(og, "Operation group cannot be null");
+
             String tenantGroupId = tenantGroup.getId();
+
             String tenantIdPrefix = Strings
                     .padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
             String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
@@ -81,8 +98,9 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
             String paddedTenantId = Strings.padStart(formattedTenantId, loadProfile.getTenantIdLength(), 'x');
             String tenantId = paddedTenantId.substring(0, loadProfile.getTenantIdLength());
 
+            boolean useGlobalConnection = tenantGroup.isUseGlobalConnection() || og.isUseGlobalConnection() ;
             TenantOperationInfo sample = new TenantOperationInfo(modelName, scenarioName, tableName,
-                    tenantGroupId, op.getId(), tenantId, op);
+                    tenantGroupId, op.getId(), tenantId, op, useGlobalConnection);
             return sample;
         }
     }

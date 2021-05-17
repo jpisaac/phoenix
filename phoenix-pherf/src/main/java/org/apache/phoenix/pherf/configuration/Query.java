@@ -34,7 +34,6 @@ public class Query {
     private String statement;
     private Long expectedAggregateRowCount;
     private String ddl;
-    private boolean useGlobalConnection;
     private Pattern pattern;
     private long timeoutDuration = Long.MAX_VALUE;
 
@@ -162,15 +161,6 @@ public class Query {
 
     public void setId(String id) {
         this.id = id;
-    }
-
-    @XmlAttribute
-    public boolean isUseGlobalConnection() {
-        return useGlobalConnection;
-    }
-
-    public void setUseGlobalConnection(boolean useGlobalConnection) {
-        this.useGlobalConnection = useGlobalConnection;
     }
 
     @XmlAttribute

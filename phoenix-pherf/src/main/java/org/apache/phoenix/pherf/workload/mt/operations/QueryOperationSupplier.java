@@ -59,12 +59,9 @@ public class QueryOperationSupplier extends BaseOperationSupplier {
                 final String scenarioName = input.getScenarioName();
                 final String tableName = input.getTableName();
 
-                // TODO:
-                // Ideally the fact that the op needs to executed using global connection
-                // needs to be built into the framework and injected during event generation.
-                // For now a special tenant whose id = "TGLOBAL00000001" will be logged.
-                final boolean isTenantGroupGlobal = (tenantGroup.compareTo(TenantGroup.DEFAULT_GLOBAL_ID) == 0);
-                final String tenantId = isTenantGroupGlobal || query.isUseGlobalConnection() ? null : input.getTenantId();
+                // Check whether we need to use global connection
+                // if useGlobalConnection = true then a tenantId = "TGLOBAL00000000" will be logged.
+                final String tenantId = input.isUseGlobalConnection() ? null : input.getTenantId();
 
                 String opName = String.format("%s:%s:%s:%s:%s", scenarioName, tableName,
                         opGroup, tenantGroup, input.getTenantId());
