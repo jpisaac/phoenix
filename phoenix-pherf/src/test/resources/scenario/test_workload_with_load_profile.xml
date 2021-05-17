@@ -389,7 +389,7 @@
             </preScenarioDdls>
 
             <upserts>
-                <upsert id="op131" useGlobalConnection="true">
+                <upsert id="op131">
                     <column>
                         <type>CHAR</type>
                         <name>PARENT_ID_SEQ</name>

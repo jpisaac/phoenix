@@ -32,9 +32,17 @@ public class TenantOperationInfo {
     private final String operationGroupId;
     private final Operation operation;
 
+    private boolean useGlobalConnection;
+
     public TenantOperationInfo(String modelName, String scenarioName, String tableName,
             String tenantGroupId, String operationGroupId,
             String tenantId, Operation operation) {
+        this(modelName, scenarioName, tableName, tenantGroupId, operationGroupId, tenantId, operation,false);
+    }
+
+    public TenantOperationInfo(String modelName, String scenarioName, String tableName,
+            String tenantGroupId, String operationGroupId,
+            String tenantId, Operation operation, boolean useGlobalConnection) {
         this.modelName = modelName;
         this.scenarioName = scenarioName;
         this.tableName = tableName;
@@ -42,6 +50,7 @@ public class TenantOperationInfo {
         this.operationGroupId = operationGroupId;
         this.tenantId = tenantId;
         this.operation = operation;
+        this.useGlobalConnection = useGlobalConnection;
     }
 
     public String getModelName() { return modelName; }
@@ -67,4 +76,6 @@ public class TenantOperationInfo {
     public String getTenantId() {
         return tenantId;
     }
+
+    public boolean isUseGlobalConnection() { return useGlobalConnection; }
 }
