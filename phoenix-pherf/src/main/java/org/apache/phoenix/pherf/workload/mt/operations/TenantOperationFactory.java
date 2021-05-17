@@ -333,6 +333,8 @@ public class TenantOperationFactory {
                     return OperationType.PRE_RUN;
                 }
             };
+
+            boolean useGlobalConnection = input.isUseGlobalConnection();
             // Initialize with the pre run operation.
             TenantOperationInfo preRunSample = new TenantOperationInfo(
                     input.getModelName(),
@@ -340,7 +342,7 @@ public class TenantOperationFactory {
                     input.getTableName(),
                     input.getTenantGroupId(),
                     Operation.OperationType.PRE_RUN.name(),
-                    input.getTenantId(), operation);
+                    input.getTenantId(), operation, useGlobalConnection);
 
             try {
                 // Run the initialization operation.

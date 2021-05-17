@@ -149,7 +149,7 @@
             </loadProfile>
 
             <upserts>
-                <upsert id="upsertOp" useGlobalConnection="true" upsertGroup="write"/>
+                <upsert id="upsertOp" upsertGroup="write"/>
             </upserts>
         </scenario>
         <scenario tableName="PHERF.TEST_MULTI_TENANT_TABLE" name="TEST_TABLE_READ" generatorName="WEIGHTED">
@@ -161,8 +161,8 @@
             </loadProfile>
 
             <querySet>
-                <query id="queryOp1" useGlobalConnection="true" statement="select count(*) from PHERF.TEST_MULTI_TENANT_TABLE" queryGroup="Aggregation"/>
-                <query id="queryOp2" useGlobalConnection="true" statement="select * from PHERF.TEST_MULTI_TENANT_TABLE LIMIT 100" queryGroup="LIMIT"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.TEST_MULTI_TENANT_TABLE" queryGroup="Aggregation"/>
+                <query id="queryOp2" statement="select * from PHERF.TEST_MULTI_TENANT_TABLE LIMIT 100" queryGroup="LIMIT"/>
             </querySet>
         </scenario>
     </scenarios>

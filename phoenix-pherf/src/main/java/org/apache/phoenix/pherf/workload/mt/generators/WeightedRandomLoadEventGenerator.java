@@ -56,6 +56,7 @@ public class WeightedRandomLoadEventGenerator extends BaseLoadEventGenerator {
         private final EnumeratedDistribution<String> distribution;
 
         private final Map<String, TenantGroup> tenantGroupMap = Maps.newHashMap();
+        private final Map<String, OperationGroup> opGroupMap = Maps.newHashMap();
         private final Map<String, Operation> operationMap = Maps.newHashMap();
         private final List<String> autoWeightedOperations = Lists.newArrayList();
         private final int numAutoWeightedOperations;
@@ -74,13 +75,15 @@ public class WeightedRandomLoadEventGenerator extends BaseLoadEventGenerator {
             Preconditions.checkArgument(!tenantGroupMap.isEmpty(),
                     "Tenant group cannot be empty");
 
-            for (Operation op : operationList) {
-                for (OperationGroup loadOp : loadProfile.getOpDistribution()) {
+            for (OperationGroup loadOp : loadProfile.getOpDistribution()) {
+                for (Operation op : operationList) {
                     if (op.getId().compareTo(loadOp.getId()) == 0) {
+                        opGroupMap.put(loadOp.getId(), loadOp);
                         operationMap.put(op.getId(), op);
                     }
                 }
             }
+
             Preconditions.checkArgument(!operationMap.isEmpty(),
                     "Operation list and load profile operation do not match");
             this.distribution = initProbabilityDistribution(scenario.getLoadProfile());
@@ -99,15 +102,21 @@ public class WeightedRandomLoadEventGenerator extends BaseLoadEventGenerator {
                 opId = autoWeightedOperations.get(RANDOM.nextInt(numAutoWeightedOperations));
                 op = operationMap.get(opId);
             }
-            int numTenants = tenantGroupMap.get(tenantGroupId).getNumTenants();
+            TenantGroup tg = tenantGroupMap.get(tenantGroupId);
+            OperationGroup og = opGroupMap.get(opId);
+            Preconditions.checkNotNull(tg, "Tenant group cannot be null");
+            Preconditions.checkNotNull(og, "Operation group cannot be null");
+
+            int numTenants = tg.getNumTenants();
             String tenantIdPrefix = Strings.padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
             String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
                     tenantIdPrefix.substring(0, loadProfile.getGroupIdLength()), RANDOM.nextInt(numTenants));
             String paddedTenantId = Strings.padStart(formattedTenantId, loadProfile.getTenantIdLength(), 'x');
             String tenantId = paddedTenantId.substring(0, loadProfile.getTenantIdLength());
 
+            boolean useGlobalConnection = tg.isUseGlobalConnection() || og.isUseGlobalConnection();
             TenantOperationInfo sample = new TenantOperationInfo(modelName, scenarioName, tableName,
-                    tenantGroupId, opId, tenantId, op);
+                    tenantGroupId, opId, tenantId, op, useGlobalConnection);
             return sample;
         }
 

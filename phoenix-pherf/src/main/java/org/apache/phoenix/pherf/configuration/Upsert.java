@@ -32,7 +32,6 @@ public class Upsert {
     private String upsertGroup;
     private String statement;
     private List<Column> column;
-    private boolean useGlobalConnection;
     private Pattern pattern;
     private long timeoutDuration = Long.MAX_VALUE;
 
@@ -98,15 +97,6 @@ public class Upsert {
 
     public void setColumn(List<Column> column) {
         this.column = column;
-    }
-
-    @XmlAttribute
-    public boolean isUseGlobalConnection() {
-        return useGlobalConnection;
-    }
-
-    public void setUseGlobalConnection(boolean useGlobalConnection) {
-        this.useGlobalConnection = useGlobalConnection;
     }
 
     @XmlAttribute

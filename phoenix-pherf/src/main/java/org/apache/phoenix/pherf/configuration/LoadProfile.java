@@ -50,6 +50,9 @@ public class LoadProfile {
     private String tenantIdFormat;
     private int groupIdLength;
     private int tenantIdLength;
+
+    private String generatorName;
+
     // Holds the desired tenant distribution for this load.
     private List<TenantGroup> tenantDistribution;
     // Holds the desired operation distribution for this load.
@@ -117,5 +120,13 @@ public class LoadProfile {
 
     public void setOpDistribution(List<OperationGroup> opDistribution) {
         this.opDistribution = opDistribution;
+    }
+
+    public String getGeneratorName() {
+        return generatorName;
+    }
+
+    public void setGeneratorName(String generatorName) {
+        this.generatorName = generatorName;
     }
 }

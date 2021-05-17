@@ -22,6 +22,7 @@ import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.ExecutionType;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
+import org.apache.phoenix.pherf.configuration.OperationGroup;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -59,6 +60,7 @@ public class SequentialLoadEventGenerator extends BaseLoadEventGenerator {
 
         private final TenantGroup tenantGroup;
         private final List<Operation> operationList;
+        private final Map<String, OperationGroup> opGroupMap = Maps.newHashMap();
 
         public SequentialSampler(List<Operation> operationList, DataModel model,
                 Scenario scenario, Properties properties) {
@@ -70,7 +72,7 @@ public class SequentialLoadEventGenerator extends BaseLoadEventGenerator {
 
             // Track the individual tenant group with single tenant or global connection,
             // so that given a generated sample we can use the supplied tenant.
-            // NOTE : Not sure if there is a case for multiple tenants in a uniform distribution.
+            // NOTE : Not sure if there is a case for multiple tenants in a sequential distribution.
             // For now keeping it simple.
             Preconditions.checkArgument(loadProfile.getTenantDistribution() != null,
                     "Tenant distribution cannot be null");
@@ -79,10 +81,22 @@ public class SequentialLoadEventGenerator extends BaseLoadEventGenerator {
             Preconditions.checkArgument(loadProfile.getTenantDistribution().size() == 1,
                     "Tenant group cannot be more than 1");
             tenantGroup = loadProfile.getTenantDistribution().get(0);
+
+            for (OperationGroup loadOp : loadProfile.getOpDistribution()) {
+                for (Operation op : operationList) {
+                    if (op.getId().compareTo(loadOp.getId()) == 0) {
+                        opGroupMap.put(loadOp.getId(), loadOp);
+                    }
+                }
+            }
         }
 
         public TenantOperationInfo nextSample() {
             Operation op = operationList.get(opIndex % operationList.size());
+
+            OperationGroup og = opGroupMap.get(op.getId());
+            Preconditions.checkNotNull(og, "Operation group cannot be null");
+
             String tenantGroupId = tenantGroup.getId();
             String tenantIdPrefix = Strings
                     .padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
@@ -91,8 +105,9 @@ public class SequentialLoadEventGenerator extends BaseLoadEventGenerator {
             String paddedTenantId = Strings.padStart(formattedTenantId, loadProfile.getTenantIdLength(), 'x');
             String tenantId = paddedTenantId.substring(0, loadProfile.getTenantIdLength());
 
+            boolean useGlobalConnection = tenantGroup.isUseGlobalConnection() || og.isUseGlobalConnection() ;
             TenantOperationInfo sample = new TenantOperationInfo(modelName, scenarioName, tableName,
-                    tenantGroupId, op.getId(), tenantId, op);
+                    tenantGroupId, op.getId(), tenantId, op, useGlobalConnection);
 
             iteration++;
             if (iteration % numHandlers == 0) {
