@@ -422,7 +422,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
-    private void assertMetadata(Connection conn, PTable.ImmutableStorageScheme expectedStorageScheme, PTable.QualifierEncodingScheme
+    public static void assertMetadata(Connection conn, PTable.ImmutableStorageScheme expectedStorageScheme, PTable.QualifierEncodingScheme
             expectedColumnEncoding, String tableName)
             throws Exception {
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
@@ -464,7 +464,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                     hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
             Scan scan = new Scan();
             scan.setRaw(true);
-            LOGGER.debug("***** Table Name : " + tableName);
+            LOGGER.info("***** Table Name : " + tableName);
             ResultScanner scanner = hTable.getScanner(scan);
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 for (Cell cell : result.rawCells()) {
@@ -473,7 +473,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                             .entrySet()) {
                         byte[] family = entryF.getKey();
                     }
-                    LOGGER.debug(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    LOGGER.info(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
                 }
             }
         }

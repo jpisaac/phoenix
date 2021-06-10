@@ -35,6 +35,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_E
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
@@ -112,6 +113,7 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
+import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
@@ -140,6 +142,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.HashSet;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import com.google.common.annotations.VisibleForTesting;
@@ -175,6 +178,8 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.task.SystemTaskParams;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
+import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
@@ -3640,12 +3645,15 @@ public class MetaDataClient {
                 metaPropertiesEvaluated.getUseStatsForParallelization(),
                 metaPropertiesEvaluated.getPhoenixTTL(),
                 metaPropertiesEvaluated.isChangeDetectionEnabled(),
-                metaPropertiesEvaluated.getPhysicalTableName());
+                metaPropertiesEvaluated.getPhysicalTableName(),
+                metaPropertiesEvaluated.getColumnEncodedBytes());
     }
 
-    private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional, Long updateCacheFrequency, Long phoenixTTL, String physicalTableName) throws SQLException {
+    private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional,
+                                       Long updateCacheFrequency, Long phoenixTTL, String physicalTableName, QualifierEncodingScheme columnEncodedBytes) throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null,
-            updateCacheFrequency, null, null, null, null, -1L, null, null, null,phoenixTTL, false, physicalTableName);
+            updateCacheFrequency, null, null, null, null, -1L, null, null, null,phoenixTTL, false, physicalTableName,
+                columnEncodedBytes);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
@@ -3653,7 +3661,8 @@ public class MetaDataClient {
             Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
             Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema,
             ImmutableStorageScheme immutableStorageScheme, Boolean useStatsForParallelization,
-            Long phoenixTTL, Boolean isChangeDetectionEnabled, String physicalTableName)
+            Long phoenixTTL, Boolean isChangeDetectionEnabled, String physicalTableName,
+                                      QualifierEncodingScheme columnEncodedBytes)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3700,6 +3709,9 @@ public class MetaDataClient {
         if (appendOnlySchema !=null) {
             mutateBooleanProperty(tenantId, schemaName, tableName, APPEND_ONLY_SCHEMA, appendOnlySchema);
         }
+        if (columnEncodedBytes !=null) {
+            mutateByteProperty(tenantId, schemaName, tableName, ENCODING_SCHEME, columnEncodedBytes.getSerializedMetadataValue());
+        }
         if (immutableStorageScheme !=null) {
             mutateStringProperty(tenantId, schemaName, tableName, IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.name());
         }
@@ -3715,6 +3727,7 @@ public class MetaDataClient {
         if (!Strings.isNullOrEmpty(physicalTableName)) {
             mutateStringProperty(tenantId, schemaName, tableName, PHYSICAL_TABLE_NAME, physicalTableName);
         }
+
         return seqNum;
     }
 
@@ -3824,6 +3837,8 @@ public class MetaDataClient {
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ?
             origColumnDefs.size() : 0);
         PName tenantId = connection.getTenantId();
+        boolean sharedIndex = tableType == PTableType.INDEX && (table.getIndexType() == IndexType.LOCAL || table.getViewIndexId() != null);
+        String tenantIdToUse = connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
         PName physicalName = table.getPhysicalName();
@@ -3917,6 +3932,9 @@ public class MetaDataClient {
 
                 MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
                 changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
+
+                boolean isTransformNeeded = Transform.checkIsTransformNeeded(metaProperties, schemaName, table, tableName, null, tenantIdToUse, connection);
+
                 // If changing isImmutableRows to true or it's not being changed and is already true
                 boolean willBeImmutableRows = Boolean.TRUE.equals(metaPropertiesEvaluated.getIsImmutableRows()) || (metaPropertiesEvaluated.getIsImmutableRows() == null && table.isImmutableRows());
                 boolean willBeTxnl = metaProperties.getNonTxToTx();
@@ -4071,7 +4089,8 @@ public class MetaDataClient {
                                 metaProperties.getNonTxToTx() ? Boolean.TRUE : null,
                                 metaPropertiesEvaluated.getUpdateCacheFrequency(),
                                 metaPropertiesEvaluated.getPhoenixTTL(),
-                                metaProperties.getPhysicalTableName());
+                                metaProperties.getPhysicalTableName(),
+                                metaProperties.getColumnEncodedBytesProp());
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
@@ -4083,25 +4102,34 @@ public class MetaDataClient {
                                 Boolean.FALSE,
                                 metaPropertiesEvaluated.getUpdateCacheFrequency(),
                                 metaPropertiesEvaluated.getPhoenixTTL(),
-                                metaPropertiesEvaluated.getPhysicalTableName());
+                                metaPropertiesEvaluated.getPhysicalTableName(),
+                                metaPropertiesEvaluated.getColumnEncodedBytes());
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
 
+                long seqNum = 0;
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
-                    incrementTableSeqNum(table, tableType, columnDefs.size(), metaPropertiesEvaluated);
+                    seqNum = incrementTableSeqNum(table, tableType, columnDefs.size(), metaPropertiesEvaluated);
 
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
+                }
+
+               if (isTransformNeeded) {
+                   try {
+                       Transform.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+                    } catch (SQLException ex) {
+                       connection.rollback();
+                       throw ex;
+                   }
                 }
 
                 // Force the table header row to be first
                 Collections.reverse(tableMetaData);
                 // Add column metadata afterwards, maintaining the order so columns have more predictable ordinal position
                 tableMetaData.addAll(columnMetaData);
-                boolean sharedIndex = tableType == PTableType.INDEX && (table.getIndexType() == IndexType.LOCAL || table.getViewIndexId() != null);
-                String tenantIdToUse = connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
                 if (!changedCqCounters.isEmpty()) {
                     PreparedStatement linkStatement;
                         linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER);
@@ -4542,7 +4570,7 @@ public class MetaDataClient {
                         }
                     }
                     if (!indexColumnsToDrop.isEmpty()) {
-                        long indexTableSeqNum = incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null, null, null, null);
+                        long indexTableSeqNum = incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null, null, null, null,null);
                         dropColumnMutations(index, indexColumnsToDrop);
                         long clientTimestamp = MutationState.getTableTimestamp(timeStamp, connection.getSCN());
                         connection.removeColumn(tenantId, index.getName().getString(),
@@ -4553,7 +4581,7 @@ public class MetaDataClient {
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
 
-                long seqNum = incrementTableSeqNum(table, statement.getTableType(), -tableColumnsToDrop.size(), null, null, null, null);
+                long seqNum = incrementTableSeqNum(table, statement.getTableType(), -tableColumnsToDrop.size(), null, null, null, null,null);
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
                 // Force table header to be first in list
@@ -4746,6 +4774,7 @@ public class MetaDataClient {
     public MutationState alterIndex(AlterIndexStatement statement) throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
+        long seqNum = 0L;
         try {
             String dataTableName = statement.getTableName();
             final String indexName = statement.getTable().getName().getTableName();
@@ -4761,6 +4790,7 @@ public class MetaDataClient {
             Map<String, List<Pair<String, Object>>> properties=new HashMap<>(statement.getProps().size());;
             MetaProperties metaProperties = loadStmtProperties(statement.getProps(),properties,table,false);
 
+            boolean isTransformNeeded = Transform.checkIsTransformNeeded(metaProperties, schemaName, table, indexName, dataTableName, tenantId, connection);
             MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
             boolean changingPhoenixTableProperty= evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
 
@@ -4804,7 +4834,7 @@ public class MetaDataClient {
 
 
             if (changingPhoenixTableProperty) {
-                incrementTableSeqNum(table,statement.getTableType(), 0, metaPropertiesEvaluated);
+                seqNum = incrementTableSeqNum(table,statement.getTableType(), 0, metaPropertiesEvaluated);
                 tableMetadata.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
             }
@@ -4820,6 +4850,15 @@ public class MetaDataClient {
                 .setMessage(" currentState=" + indexRef.getTable().getIndexState() + ". requestedState=" + newIndexState )
                 .setSchemaName(schemaName).setTableName(indexName).build().buildException();
             }
+            if (isTransformNeeded) {
+                try {
+                    Transform.addTransform(connection, tenantId, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+                } catch (SQLException ex) {
+                    connection.rollback();
+                    throw ex;
+                }
+            }
+
             if (code == MutationCode.TABLE_ALREADY_EXISTS) {
                 if (result.getTable() != null) { // To accommodate connection-less update of index state
                     addTableToCache(result);
@@ -5223,6 +5262,8 @@ public class MetaDataClient {
                         metaProperties.setAppendOnlySchemaProp((Boolean) value);
                     } else if (propName.equalsIgnoreCase(IMMUTABLE_STORAGE_SCHEME)) {
                         metaProperties.setImmutableStorageSchemeProp((ImmutableStorageScheme)value);
+                    } else if (propName.equalsIgnoreCase(COLUMN_ENCODED_BYTES)) {
+                        metaProperties.setColumnEncodedBytesProp(QualifierEncodingScheme.fromSerializedValue((byte)value));
                     } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
                         metaProperties.setUseStatsForParallelizationProp((Boolean)value);
                     } else if (propName.equalsIgnoreCase(PHOENIX_TTL)) {
@@ -5247,12 +5288,8 @@ public class MetaDataClient {
             throws SQLException {
         boolean changingPhoenixTableProperty = false;
 
-        if (metaProperties.getImmutableRowsProp() != null) {
+        if (metaProperties.getImmutableRowsProp() != null && table.getType() != INDEX) {
             if (metaProperties.getImmutableRowsProp().booleanValue() != table.isImmutableRows()) {
-                if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_IMMUTABLE_ROWS_PROPERTY)
-                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-                }
                 metaPropertiesEvaluated.setIsImmutableRows(metaProperties.getImmutableRowsProp());
                 changingPhoenixTableProperty = true;
             }
@@ -5293,16 +5330,33 @@ public class MetaDataClient {
             }
         }
 
-        if (metaProperties.getImmutableStorageSchemeProp()!=null) {
-            if (table.getImmutableStorageScheme() == ONE_CELL_PER_COLUMN ||
-                    metaProperties.getImmutableStorageSchemeProp() == ONE_CELL_PER_COLUMN) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE)
-                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-            }
-            else if (metaProperties.getImmutableStorageSchemeProp() != table.getImmutableStorageScheme()) {
-                metaPropertiesEvaluated.setImmutableStorageScheme(metaProperties.getImmutableStorageSchemeProp());
+        if (metaProperties.getColumnEncodedBytesProp() != null) {
+            if (metaProperties.getColumnEncodedBytesProp() != table.getEncodingScheme()) {
+                // Transform is needed, so we will not be setting it here. We set the boolean to increment sequence num
                 changingPhoenixTableProperty = true;
             }
+        }
+
+        if (metaProperties.getImmutableStorageSchemeProp()!=null) {
+            if (metaProperties.getImmutableStorageSchemeProp() != table.getImmutableStorageScheme()) {
+                // Transform is needed, so we will not be setting it here. We set the boolean to increment sequence num
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        // Get immutableStorageScheme and encoding and check compatibility
+        ImmutableStorageScheme immutableStorageScheme = table.getImmutableStorageScheme();
+        if (metaProperties.getImmutableStorageSchemeProp() != null) {
+            immutableStorageScheme = metaProperties.getImmutableStorageSchemeProp();
+        }
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        if (metaProperties.getColumnEncodedBytesProp() != null) {
+            encodingScheme = metaProperties.getColumnEncodedBytesProp();
+        }
+        if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS && encodingScheme == NON_ENCODED_QUALIFIERS) {
+            // encoding scheme is set as non-encoded on purpose, so we should fail
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
+                    .setSchemaName(schemaName).setTableName(tableName).build().buildException();
         }
 
         if (metaProperties.getGuidePostWidth() == null || metaProperties.getGuidePostWidth() >= 0) {
@@ -5403,7 +5457,7 @@ public class MetaDataClient {
         return changingPhoenixTableProperty;
     }
 
-    private static class MetaProperties {
+    public static class MetaProperties {
         private Boolean isImmutableRowsProp = null;
         private Boolean multiTenantProp = null;
         private Boolean disableWALProp = null;
@@ -5412,6 +5466,7 @@ public class MetaDataClient {
         private Boolean isTransactionalProp = null;
         private Long updateCacheFrequencyProp = null;
         private String physicalTableNameProp = null;
+        private QualifierEncodingScheme columnEncodedBytesProp = null;
         private Boolean appendOnlySchemaProp = null;
         private Long guidePostWidth = -1L;
         private ImmutableStorageScheme immutableStorageSchemeProp = null;
@@ -5473,10 +5528,6 @@ public class MetaDataClient {
             this.physicalTableNameProp = physicalTableNameProp;
         }
 
-        public String gethysicalTableNameProp() {
-            return this.physicalTableNameProp;
-        }
-
         public Long getUpdateCacheFrequencyProp() {
             return updateCacheFrequencyProp;
         }
@@ -5508,6 +5559,15 @@ public class MetaDataClient {
         public void setImmutableStorageSchemeProp(
                 ImmutableStorageScheme immutableStorageSchemeProp) {
             this.immutableStorageSchemeProp = immutableStorageSchemeProp;
+        }
+
+        public QualifierEncodingScheme getColumnEncodedBytesProp() {
+            return columnEncodedBytesProp;
+        }
+
+        public void setColumnEncodedBytesProp(
+                QualifierEncodingScheme columnEncodedBytesProp) {
+            this.columnEncodedBytesProp = columnEncodedBytesProp;
         }
 
         public Boolean getUseStatsForParallelizationProp() {
@@ -5547,7 +5607,7 @@ public class MetaDataClient {
         }
     }
 
-    private static class MetaPropertiesEvaluated {
+    public static class MetaPropertiesEvaluated {
         private Boolean isImmutableRows;
         private Boolean multiTenant = null;
         private Boolean disableWAL = null;
@@ -5555,6 +5615,7 @@ public class MetaDataClient {
         private Boolean appendOnlySchema = null;
         private Long guidePostWidth = -1L;
         private ImmutableStorageScheme immutableStorageScheme = null;
+        private QualifierEncodingScheme columnEncodedBytes = null;
         private Boolean storeNulls = null;
         private Boolean useStatsForParallelization = null;
         private Boolean isTransactional = null;
@@ -5619,6 +5680,13 @@ public class MetaDataClient {
             this.immutableStorageScheme = immutableStorageScheme;
         }
 
+        public QualifierEncodingScheme getColumnEncodedBytes() {
+            return columnEncodedBytes;
+        }
+
+        public void setColumnEncodedBytes(QualifierEncodingScheme columnEncodedBytes) {
+            this.columnEncodedBytes = columnEncodedBytes;
+        }
         public Boolean getStoreNulls() {
             return storeNulls;
         }
