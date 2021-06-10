@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.Map.Entry;
@@ -35,7 +37,6 @@ import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.procedure2.util.StringUtils;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
@@ -143,12 +144,18 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
       // TODO: a better way to check if user enables the HA feature
       if (url.contains("|")) {
           // High availability connection using two clusters
-          HighAvailabilityGroup haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
-          return haGroup.connect(augmentedInfo);
-      } else {
-          ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
-          return cqs.connect(url, augmentedInfo);
+          Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
+          if (haGroup.isPresent()) {
+              return haGroup.get().connect(augmentedInfo);
+          } else {
+              // If empty HA group is returned, fall back to single cluster.
+              url = HighAvailabilityGroup.getFallbackCluster(url, info)
+                      .orElseThrow(() -> new SQLException(
+                              "HA group can not be initialized, not fallback to single cluster"));
+          }
       }
+      ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
+      return cqs.connect(url, augmentedInfo);
     }
 
     /**
@@ -403,7 +410,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 }
             } // else, no connection, no need to login
             // Will use the current User from UGI
-            String haGroup = info.getProperty(HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR);
+            String haGroup = info.getProperty(PHOENIX_HA_GROUP_ATTR);
             return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab, haGroup);
         }
 

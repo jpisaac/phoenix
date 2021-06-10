@@ -27,10 +27,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.startsWith;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -45,6 +47,9 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.lang.RandomStringUtils;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.api.ExistsBuilder;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -257,5 +262,49 @@ public class HighAvailabilityGroupTestIT {
         assertFalse(haGroup.isActive(null));
         PhoenixConnection connection = haGroup.connectToOneCluster(ZK1, clientProperties);
         assertTrue(haGroup.isActive(connection));
+    }
+
+    /**
+     * Test that when missing cluster role records, the HA connection request will fall back to the
+     * single cluster connection.
+     */
+    @SuppressWarnings("UnstableApiUsage")
+    @Test
+    public void testNegativeCacheWhenMissingClusterRoleRecords() throws Exception {
+        String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+        HAGroupInfo haGroupInfo2 = new HAGroupInfo(haGroupName2, ZK1, ZK2);
+        HighAvailabilityGroup haGroup2 = spy(new HighAvailabilityGroup(haGroupInfo2, clientProperties, null, READY));
+        doThrow(new RuntimeException("Mocked Exception when init HA group 2"))
+                .when(haGroup2).init();
+        HighAvailabilityGroup.GROUPS.put(haGroupInfo2, haGroup2);
+
+        String jdbcString = String.format("jdbc:phoenix:[%s|%s]", ZK1, ZK2);
+        // Getting HA group will get exception due to (mocked) ZK connection error
+        try {
+            HighAvailabilityGroup.get(jdbcString, clientProperties);
+            fail("Should have fail because the HA group fails to init and ZK is not connectable");
+        } catch (Exception e) {
+            LOG.info("Got expected exception", e);
+        }
+
+        // Make ZK connectable and the cluster role record be missing
+        CuratorFramework curator = mock(CuratorFramework.class);
+        when(curator.blockUntilConnected(anyInt(), any(TimeUnit.class))).thenReturn(true);
+        HighAvailabilityGroup.CURATOR_CACHE.put(ZK2, curator);
+        HighAvailabilityGroup.CURATOR_CACHE.put(ZK1, curator);
+
+        ExistsBuilder eb = mock(ExistsBuilder.class);
+        when(eb.forPath(anyString())).thenReturn(null);
+        when(curator.checkExists()).thenReturn(eb);
+
+        // Getting HA group will not throw exception but instead will return empty optional
+        for (int i = 0; i < 100; i++) {
+            assertFalse(HighAvailabilityGroup.get(jdbcString, clientProperties).isPresent());
+        }
+
+        // After 100 connection request, the actual time that init() is called should still be one
+        // Why is that? Remember the negative cache.
+        verify(haGroup2, times(1)).init();
     }
 }

@@ -44,6 +44,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -548,16 +549,20 @@ public class HighAvailabilityTestingUtility {
      * This helper method will wait up to 3 minutes to retrieve the HA Group
      */
     public static HighAvailabilityGroup getHighAvailibilityGroup(String jdbcUrl, Properties clientProperties) throws TimeoutException, InterruptedException {
-        AtomicReference<HighAvailabilityGroup> haGroup = new AtomicReference<>();
+        AtomicReference<HighAvailabilityGroup> haGroupRef = new AtomicReference<>();
         GenericTestUtils.waitFor(() -> {
             try {
-                haGroup.set(HighAvailabilityGroup.get(jdbcUrl, clientProperties));
+                Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
+                if (!haGroup.isPresent()) {
+                    return false;
+                }
+                haGroupRef.set(haGroup.get());
+                return true;
             } catch (SQLException throwables) {
                 return false;
             }
-            return true;
         },1_000,180_000);
-        return haGroup.get();
+        return haGroupRef.get();
     }
 
     public static List<ExecutorService> getListOfSingleThreadExecutorServices() {

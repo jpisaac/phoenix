@@ -59,6 +59,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
@@ -77,9 +78,18 @@ import com.google.common.base.Preconditions;
  * is a shared resource by many clients.  Closing it intentionally or accidentally by a client will
  * impact other connections in this group with unexpected behavior.
  */
+@SuppressWarnings("UnstableApiUsage")
 public class HighAvailabilityGroup {
     public static final String PHOENIX_HA_ATTR_PREFIX = "phoenix.ha.";
     public static final String PHOENIX_HA_GROUP_ATTR = PHOENIX_HA_ATTR_PREFIX + "group.name";
+    /** Should we fall back to single cluster when cluster role record is missing? */
+    public static final String PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_KEY =
+            PHOENIX_HA_ATTR_PREFIX + "fallback.enabled";
+    public static final String PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_DEFAULT =
+            String.valueOf(Boolean.TRUE);
+    /** The single-cluster connection URL when it needs to fall back. */
+    public static final String PHOENIX_HA_FALLBACK_CLUSTER_KEY =
+            PHOENIX_HA_ATTR_PREFIX + "fallback.cluster";
     public static final String PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE =
             "phoenix" + ZKPaths.PATH_SEPARATOR + "ha";
 
@@ -108,10 +118,14 @@ public class HighAvailabilityGroup {
             PHOENIX_HA_ATTR_PREFIX + "transition.timeout.ms";
     public static final long PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT = 5 * 60 * 1000; // 5 mins
 
-    private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
-    private static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
+    static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
+    @VisibleForTesting
+    static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
+    @VisibleForTesting
+    static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
+            .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS)
+            .build();
     /** The Curator client cache, one client instance per cluster. */
-    @SuppressWarnings("UnstableApiUsage")
     @VisibleForTesting
     static final Cache<String, CuratorFramework> CURATOR_CACHE = CacheBuilder.newBuilder()
             .expireAfterAccess(DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION, TimeUnit.MILLISECONDS)
@@ -158,6 +172,11 @@ public class HighAvailabilityGroup {
 
         public String getUrl2() {
             return urls.getSecond();
+        }
+
+        /** Helper method to return the znode path in the Phoenix HA namespace. */
+        String getZkPath() {
+            return ZKPaths.PATH_SEPARATOR + name;
         }
 
         @Override
@@ -275,6 +294,9 @@ public class HighAvailabilityGroup {
         try {
             waitForInitialization(properties);
         } catch (IOException e) {
+            // HA group that fails to initialize will not be kept in the global cache.
+            // Next connection request will create and initialize a new HA group.
+            // Before returning in case of exception, following code will cancel the futures.
             f1.cancel(true);
             f2.cancel(true);
             throw e;
@@ -426,7 +448,8 @@ public class HighAvailabilityGroup {
                 .connect(url, properties);
     }
 
-    public static HighAvailabilityGroup get(String url, Properties properties) throws SQLException {
+    public static HAGroupInfo getHAGroupInfo(String url, Properties properties)
+            throws SQLException {
         if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             url = url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
         }
@@ -446,8 +469,32 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
+        return new HAGroupInfo(name, urls[0], urls[1]);
+    }
 
-        HAGroupInfo info = new HAGroupInfo(name, urls[0], urls[1]);
+    /**
+     * Get an instance of HA group given the HA connecting URL (with "|") and client properties.
+     *
+     * The HA group does not have a public constructor. This method is the only public one for
+     * getting an HA group instance. The reason is that, HA group is considered expensive to create
+     * and maintain. Caching it will make it reusable for all connection requests to this group.
+     *
+     * It will return the cached instance, if any, for the target HA group. The HA group creation
+     * and initialization are blocking operations. Upon initialization failure, the HA group
+     * information may be saved in a negative cache iff the cause is due to missing cluster role
+     * records. In presence of empty (not null or exception) return value, client may choose to fall
+     * back to a single cluster connection to compensate missing cluster role records.
+     *
+     * @return Optional of target HA group (initialized), or empty if missing cluster role records
+     * @throws SQLException fails to get or initialize an HA group
+     */
+    public static Optional<HighAvailabilityGroup> get(String url, Properties properties)
+            throws SQLException {
+        HAGroupInfo info = getHAGroupInfo(url, properties);
+        if (MISSING_CRR_GROUPS_CACHE.getIfPresent(info) != null) {
+            return Optional.empty();
+        }
+
         HighAvailabilityGroup haGroup = GROUPS.computeIfAbsent(info,
                 haGroupInfo -> new HighAvailabilityGroup(haGroupInfo, properties));
         try {
@@ -455,13 +502,62 @@ public class HighAvailabilityGroup {
         } catch (Exception e) {
             GROUPS.remove(info);
             haGroup.close();
+            try {
+                CuratorFramework curator1 = CURATOR_CACHE.getIfPresent(info.getUrl1());
+                CuratorFramework curator2 = CURATOR_CACHE.getIfPresent(info.getUrl2());
+                if (curator1 != null && curator2 != null) {
+                    Stat node1 = curator1.checkExists().forPath(info.getZkPath());
+                    Stat node2 = curator2.checkExists().forPath(info.getZkPath());
+                    if (node1 == null && node2 == null) {
+                        // The HA group fails to initialize due to missing cluster role records on
+                        // both ZK clusters. We will put this HA group into negative cache.
+                        MISSING_CRR_GROUPS_CACHE.put(info, true);
+                        return Optional.empty();
+                    }
+                }
+            } catch (Exception e2) {
+                LOG.error("HA group {} failed to initialized. Got exception when checking if znode"
+                        + " exists on the two ZK clusters.", info, e2);
+            }
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
                     .setMessage(String.format("Cannot start HA group %s for URL %s", haGroup, url))
                     .setRootCause(e)
                     .build()
                     .buildException();
         }
-        return haGroup;
+        return Optional.of(haGroup);
+    }
+
+    /**
+     * This method helps client to get the single cluster to fallback.
+     *
+     * When getting HA group using {@link #get(String, Properties)}, it may return empty (not null
+     * or exception) value. In that case client may choose to fall back to a single cluster
+     * connection to compensate missing cluster role records instead of throw errors.
+     *
+     * @param url The HA connection url optionally; empty optional if properties disables fallback
+     * @param properties The client connection properties
+     * @return The connection url of the single cluster to fall back
+     * @throws SQLException if fails to get HA information and/or invalid properties are seen
+     */
+    static Optional<String> getFallbackCluster(String url, Properties properties) throws SQLException {
+        HAGroupInfo haGroupInfo = getHAGroupInfo(url, properties);
+
+        String fallback = properties.getProperty(PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_KEY,
+                PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_DEFAULT);
+        if (!Boolean.parseBoolean(fallback)) {
+            LOG.info("Fallback to single cluster not enabled for the HA group {} per configuration."
+                    + " HA url: '{}'.", haGroupInfo.getName(), url);
+            return Optional.empty();
+        }
+        String fallbackCluster = properties.getProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY);
+        if (StringUtils.isEmpty(fallbackCluster)) {
+            fallbackCluster = haGroupInfo.getUrl1();
+        }
+        LOG.info("Falling back to single cluster '{}' for the HA group {} to serve HA connection "
+                        + "request against url '{}'.",
+                fallbackCluster, haGroupInfo.getName(), url);
+        return Optional.of(fallbackCluster);
     }
 
     @VisibleForTesting
@@ -490,15 +586,14 @@ public class HighAvailabilityGroup {
     public static CuratorFramework getCurator(String jdbcUrl, Properties properties)
             throws IOException {
         try {
-            CuratorFramework curator = CURATOR_CACHE.get(jdbcUrl,
-                    () -> createCurator(jdbcUrl, properties));
-            if (!curator.blockUntilConnected(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT,
-                    TimeUnit.MILLISECONDS)){
-                throw new RuntimeException(
-                        String.format("Failed to connect to the CuratorFramework in timeout %d ms",
-                                PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT));
-            }
-            return curator;
+            return CURATOR_CACHE.get(jdbcUrl, () -> {
+                CuratorFramework curator = createCurator(jdbcUrl, properties);
+                if (!curator.blockUntilConnected(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT,
+                        TimeUnit.MILLISECONDS))
+                    throw new RuntimeException("Failed to connect to the CuratorFramework in "
+                            + "timeout " + PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT + " ms");
+                return curator;
+            });
         } catch (Exception e) {
             LOG.error("Fail to get an active curator for url {}", jdbcUrl, e);
             // invalidate the cache when getting/creating throws exception
@@ -609,7 +704,9 @@ public class HighAvailabilityGroup {
 
     @Override
     public String toString() {
-        return "HighAvailabilityGroup{roleRecord=" + roleRecord + ", state=" + state + "}";
+        return roleRecord == null
+                ? "HighAvailabilityGroup{roleRecord=null, info=" + info + ", state=" + state + "}"
+                : "HighAvailabilityGroup{roleRecord=" + roleRecord + ", state=" + state + "}";
     }
 
     /**
@@ -636,7 +733,7 @@ public class HighAvailabilityGroup {
 
         @Override
         public void run() {
-            final String zpath = ZKPaths.PATH_SEPARATOR + info.name; // znode path in namespace
+            final String zpath = info.getZkPath();
             while (!Thread.currentThread().isInterrupted()) {
                 try {
                     cache = new NodeCache(getCurator(jdbcUrl, properties), zpath);
