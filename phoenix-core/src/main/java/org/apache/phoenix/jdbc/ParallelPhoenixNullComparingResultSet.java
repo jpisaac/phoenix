@@ -130,6 +130,10 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet imp
                                 (boolean) ParallelPhoenixUtil.INSTANCE.getFutureNoRetry(
                                     candidateResultPair.getSecond().getCandidate(), context);
                     } catch (Exception e) {
+                        LOG.warn(
+                            "Exception while trying to read from other cluster after getting empty result from "
+                                    + "one cluster, errorOnSingleNull: " + errorOnSingleNull,
+                            e);
                         // We can't get the secondResult, check property and error if set
                         if (errorOnSingleNull) {
                             throw new SQLExceptionInfo.Builder(
