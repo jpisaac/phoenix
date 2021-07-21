@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.commons.lang.math.RandomUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.conf.Configuration;
@@ -31,7 +32,6 @@ import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.PhoenixHAAdminTool.PhoenixHAAdminHelper;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
