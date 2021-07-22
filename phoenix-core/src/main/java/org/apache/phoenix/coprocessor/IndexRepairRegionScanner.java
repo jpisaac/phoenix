@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.apache.hadoop.hbase.Cell;
@@ -64,6 +65,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Lists;
 
 /**
  * This is an index table region scanner which scans index table rows locally and then extracts data table row keys
@@ -280,6 +282,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
             regionIndex++;
         }
         for (byte[] dataRowKey: dataRowKeys) {
+            indexKey = dataRowKey;
             if (perTaskDataRowKeys.size() == maxSetSize ||
                     (regionIndex < regionCount - 1 && Bytes.BYTES_COMPARATOR.compare(indexKey, endKeys[regionIndex]) > 0)) {
                 perTaskDataRowKeys = new TreeSet<>(Bytes.BYTES_COMPARATOR);
@@ -303,6 +306,33 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         return dataRowKeys;
     }
 
+    /**
+     * @param indexMutationMap actual index mutations for a page
+     * @param dataRowKeysSetList List of per-task data row keys
+     * @return For each set of data row keys, split the acutal index mutation map into
+     * a per-task index mutation map and return the list of all index mutation maps.
+     */
+    private List<Map<byte[], List<Mutation>>> getPerTaskIndexMutationMap(
+            Map<byte[], List<Mutation>> indexMutationMap, List<Set<byte[]>> dataRowKeysSetList) {
+        List<Map<byte[], List<Mutation>>> mapList = Lists.newArrayListWithExpectedSize(dataRowKeysSetList.size());
+        for (int i = 0; i < dataRowKeysSetList.size(); ++i) {
+            Map<byte[], List<Mutation>> perTaskIndexMutationMap = new TreeMap<>(Bytes.BYTES_COMPARATOR);
+            mapList.add(perTaskIndexMutationMap);
+        }
+        for (Map.Entry<byte[], List<Mutation>> entry : indexMutationMap.entrySet()) {
+            byte[] indexRowKey = entry.getKey();
+            List<Mutation> actualMutationList = entry.getValue();
+            byte[] dataRowKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
+            for (int i = 0; i < dataRowKeysSetList.size(); ++i) {
+                if (dataRowKeysSetList.get(i).contains(dataRowKey)) {
+                    mapList.get(i).put(indexRowKey, actualMutationList);
+                    break;
+                }
+            }
+        }
+        return mapList;
+    }
+
     private void verifyAndOrRepairIndex(Map<byte[], List<Mutation>> actualIndexMutationMap) throws IOException {
         if (actualIndexMutationMap.size() == 0) {
             return;
@@ -310,13 +340,14 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Set<byte[]> dataRowKeys = getDataRowKeys(actualIndexMutationMap);
         List<Set<byte[]>> setList = getPerTaskDataRowKeys((TreeSet<byte[]>) dataRowKeys,
                 regionEndKeys, rowCountPerTask);
+        List<Map<byte[], List<Mutation>>> indexMutationMapList = getPerTaskIndexMutationMap(actualIndexMutationMap, setList);
         int taskCount = setList.size();
         TaskBatch<Boolean> tasks = new TaskBatch<>(taskCount);
         List<IndexToolVerificationResult> verificationResultList = new ArrayList<>(taskCount);
         for (int i = 0; i < taskCount; i++) {
             IndexToolVerificationResult perTaskVerificationResult = new IndexToolVerificationResult(scan);
             verificationResultList.add(perTaskVerificationResult);
-            addRepairAndOrVerifyTask(tasks, setList.get(i), actualIndexMutationMap, perTaskVerificationResult);
+            addRepairAndOrVerifyTask(tasks, setList.get(i), indexMutationMapList.get(i), perTaskVerificationResult);
         }
         submitTasks(tasks);
         if (verify) {
