@@ -464,7 +464,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                     hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
             Scan scan = new Scan();
             scan.setRaw(true);
-            LOGGER.info("***** Table Name : " + tableName);
+            System.out.println("***** Table Name : " + tableName);
             ResultScanner scanner = hTable.getScanner(scan);
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 for (Cell cell : result.rawCells()) {
@@ -473,7 +473,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                             .entrySet()) {
                         byte[] family = entryF.getKey();
                     }
-                    LOGGER.info(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    System.out.println(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
                 }
             }
         }
