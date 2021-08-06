@@ -256,15 +256,20 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         @Override
         public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
+            Cell cell = getLatestCell(ref, ts);
+            if (cell == null) {
+                return null;
+            }
+            valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            return valuePtr;
+        }
+        public Cell getLatestCell(ColumnReference ref, long ts) {
             List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
             if (cellList == null || cellList.isEmpty()) {
                 return null;
             }
-            Cell cell = cellList.get(0);
-            valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-            return valuePtr;
+            return cellList.get(0);
         }
-
         @Override
         public byte[] getRowKey() {
             return put.getRow();
