@@ -49,6 +49,8 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -80,6 +82,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
@@ -105,7 +108,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import com.google.common.base.Strings;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -169,6 +172,9 @@ public class PTableImpl implements PTable {
     private final RowKeySchema rowKeySchema;
     // Indexes associated with this table.
     private final List<PTable> indexes;
+    // If the table is going through transform, we have this.
+    private final PTable transformingNewTable;
+
     // Data table name that the index is created on.
     private final PName parentName;
     private final PName parentSchemaName;
@@ -230,6 +236,7 @@ public class PTableImpl implements PTable {
         private Integer bucketNum;
         private RowKeySchema rowKeySchema;
         private List<PTable> indexes;
+        private PTable transformingNewTable;
         private PName parentName;
         private PName parentSchemaName;
         private PName parentTableName;
@@ -393,6 +400,11 @@ public class PTableImpl implements PTable {
 
         public Builder setIndexes(List<PTable> indexes) {
             this.indexes = indexes;
+            return this;
+        }
+
+        public Builder setTransformingNewTable(PTable transformingNewTable) {
+            this.transformingNewTable = transformingNewTable;
             return this;
         }
 
@@ -785,6 +797,9 @@ public class PTableImpl implements PTable {
             for (PTable index : this.indexes) {
                 estimatedSize += index.getEstimatedSize();
             }
+            if (transformingNewTable!=null) {
+                estimatedSize += transformingNewTable.getEstimatedSize();
+            }
 
             estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
             for (PName physicalName : this.physicalNames) {
@@ -857,6 +872,7 @@ public class PTableImpl implements PTable {
         this.bucketNum = builder.bucketNum;
         this.rowKeySchema = builder.rowKeySchema;
         this.indexes = builder.indexes;
+        this.transformingNewTable = builder.transformingNewTable;
         this.parentName = builder.parentName;
         this.parentSchemaName = builder.parentSchemaName;
         this.parentTableName = builder.parentTableName;
@@ -957,6 +973,7 @@ public class PTableImpl implements PTable {
                 .setBucketNum(table.getBucketNum())
                 .setIndexes(table.getIndexes() == null ?
                         Collections.<PTable>emptyList() : table.getIndexes())
+                .setTransformingNewTable(table.getTransformingNewTable())
                 .setParentSchemaName(table.getParentSchemaName())
                 .setParentTableName(table.getParentTableName())
                 .setBaseTableLogicalName(table.getBaseTableLogicalName())
@@ -1569,6 +1586,11 @@ public class PTableImpl implements PTable {
     }
 
     @Override
+    public PTable getTransformingNewTable() {
+        return transformingNewTable;
+    }
+
+    @Override
     public PIndexState getIndexState() {
         return state;
     }
@@ -1627,7 +1649,7 @@ public class PTableImpl implements PTable {
     public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
         if (indexMaintainersPtr == null || indexMaintainersPtr.getLength()==0) {
             indexMaintainersPtr = new ImmutableBytesWritable();
-            if (indexes.isEmpty()) {
+            if (indexes.isEmpty() && transformingNewTable == null) {
                 indexMaintainersPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             } else {
                 IndexMaintainer.serialize(this, indexMaintainersPtr, connection);
@@ -1752,6 +1774,11 @@ public class PTableImpl implements PTable {
             indexes.add(createFromProto(curPTableProto));
         }
 
+        PTable transformingNewTable = null;
+        if (table.hasTransformingNewTable()){
+            PTableProtos.PTable curTransformingPTableProto = table.getTransformingNewTable();
+            transformingNewTable = createFromProto(curTransformingPTableProto);
+        }
         boolean isImmutableRows = table.getIsImmutableRows();
         PName parentSchemaName = null;
         PName parentTableName = null;
@@ -1912,6 +1939,7 @@ public class PTableImpl implements PTable {
                     .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
                     .setBucketNum((bucketNum == NO_SALTING) ? null : bucketNum)
                     .setIndexes(indexes == null ? Collections.<PTable>emptyList() : indexes)
+                    .setTransformingNewTable(transformingNewTable)
                     .setParentSchemaName(parentSchemaName)
                     .setParentTableName(parentTableName)
                     .setBaseTableLogicalName(parentLogicalName)
@@ -1978,6 +2006,10 @@ public class PTableImpl implements PTable {
         List<PTable> indexes = table.getIndexes();
         for (PTable curIndex : indexes) {
             builder.addIndexes(toProto(curIndex));
+        }
+        PTable transformingNewTable = table.getTransformingNewTable();
+        if (transformingNewTable != null) {
+            builder.setTransformingNewTable(toProto(transformingNewTable));
         }
         builder.setIsImmutableRows(table.isImmutableRows());
         // TODO remove this field in 5.0 release

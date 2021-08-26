@@ -115,6 +115,7 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -181,7 +182,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.task.SystemTaskParams;
-import org.apache.phoenix.schema.transform.SystemTransformRecord;
 import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
@@ -2495,14 +2495,18 @@ public class MetaDataClient {
                                                                 QueryServices.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
                                                                 QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
                             } else {
-                                immutableStorageScheme =
-                                        ImmutableStorageScheme
-                                                .valueOf(connection
-                                                        .getQueryServices()
-                                                        .getProps()
-                                                        .get(
-                                                                QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                                QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                                if (isImmutableRows) {
+                                    immutableStorageScheme =
+                                            ImmutableStorageScheme
+                                                    .valueOf(connection
+                                                            .getQueryServices()
+                                                            .getProps()
+                                                            .get(
+                                                                    QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                                    QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                                } else {
+                                    immutableStorageScheme = ONE_CELL_PER_COLUMN;
+                                }
                             }
                         }
                     } else {
@@ -2510,6 +2514,7 @@ public class MetaDataClient {
                     }
                     if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                             && encodingScheme == NON_ENCODED_QUALIFIERS) {
+                        getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
                                 .setSchemaName(schemaName).setTableName(tableName).build()
@@ -3110,6 +3115,11 @@ public class MetaDataClient {
             throws SQLException {
         QualifierEncodingScheme encodingScheme = null;
         Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+        if (encodingSchemeSerializedByte == null) {
+            if (tableProps.containsKey(ENCODING_SCHEME)) {
+                encodingSchemeSerializedByte = QualifierEncodingScheme.valueOf(((String) tableProps.get(ENCODING_SCHEME))).getSerializedMetadataValue();
+            }
+        }
         if (encodingSchemeSerializedByte == null) {
             // Ignore default if transactional and column encoding is not supported (as with OMID)
             if (transactionProvider == null || !transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
@@ -3999,9 +4009,10 @@ public class MetaDataClient {
                     connection.rollback();
                 }
 
-               if (isTransformNeeded) {
+                PTable transformingNewTable = null;
+                if (isTransformNeeded) {
                    try {
-                       Transform.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+                       transformingNewTable = Transform.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
                     } catch (SQLException ex) {
                        connection.rollback();
                        throw ex;
@@ -4083,7 +4094,7 @@ public class MetaDataClient {
                     acquiredColumnMutexSet.add(pColumn.toString());
                 }
                 MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table,
-                        getParentTable(table), properties, colFamiliesForPColumnsToBeAdded, columns);
+                        getParentTable(table), transformingNewTable, properties, colFamiliesForPColumnsToBeAdded, columns);
 
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
@@ -4151,6 +4162,10 @@ public class MetaDataClient {
                                     Collections.<PColumn>emptyList(), ts);
                             connection.getQueryServices().updateData(plan);
                         }
+                    }
+                    if (transformingNewTable != null) {
+                        connection.removeTable(tenantId, fullTableName, null, resolvedTimeStamp);
+                        connection.getQueryServices().clearCache();
                     }
                     if (emptyCF != null) {
                         Long scn = connection.getSCN();
@@ -4496,7 +4511,7 @@ public class MetaDataClient {
                                     Collections.<Mutation>singletonList(new Put(SchemaUtil.getTableKey
                                             (tenantIdBytes, tableContainingColumnToDrop.getSchemaName().getBytes(),
                                                     tableContainingColumnToDrop.getTableName().getBytes()))),
-                                                    tableContainingColumnToDrop, null, family, Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn>emptyList());
+                                                    tableContainingColumnToDrop, null, null,family, Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn>emptyList());
 
                         }
                     }

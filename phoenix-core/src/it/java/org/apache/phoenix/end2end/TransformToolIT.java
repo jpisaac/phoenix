@@ -20,15 +20,12 @@ package org.apache.phoenix.end2end;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.transform.TransformTool;
 import org.apache.phoenix.query.QueryServices;
@@ -57,6 +54,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
+
+import static org.apache.phoenix.end2end.index.SingleCellIndexIT.assertMetadata;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
 import static org.junit.Assert.assertEquals;
@@ -408,6 +407,71 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
             }
             assertFalse(rs1.next());
             assertFalse(rs2.next());
+        }
+    }
+
+    @Test
+    public void testTransformMutationFailureRepair() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(true);
+            int numOfRows = 0;
+            createTableAndUpsertRows(conn, dataTableFullName, numOfRows);
+            SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+            assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+            try {
+                IndexToolIT.upsertRow(stmt1, 1);
+                fail("Transform table upsert should have failed");
+            } catch (Exception e) {
+            }
+            assertEquals(0, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(0, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            IndexToolIT.upsertRow(stmt1, 2);
+
+            assertEquals(1, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(1, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                IndexToolIT.upsertRow(stmt1, 3);
+                fail("Data table upsert should have failed");
+            } catch (Exception e) {
+            }
+            assertEquals(2, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(1, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+
+            List<String> args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false);
+            runTransformTool(args.toArray(new String[0]), 0);
+
+            //TODO: Implement GlobalIndexChecker like repair for unverified rows (W-9783508)
+            assertEquals(1, getRowCount(conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTable(Bytes.toBytes(dataTableFullName)), false));
+//            assertEquals(1, getRowCount(conn.unwrap(PhoenixConnection.class).getQueryServices()
+//                    .getTable(Bytes.toBytes(record.getNewPhysicalTableName())), false));
+        } finally {
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
         }
     }
 

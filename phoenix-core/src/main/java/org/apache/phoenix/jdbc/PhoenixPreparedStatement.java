@@ -189,7 +189,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         if (statement.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(statement.getOperation());
         }
-        
+
         return executeQuery(statement,createQueryLogger(statement,query));
     }
 

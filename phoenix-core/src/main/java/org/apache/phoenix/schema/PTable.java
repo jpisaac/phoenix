@@ -770,6 +770,12 @@ public interface PTable extends PMetaDataEntity {
     List<PTable> getIndexes();
 
     /**
+     * Return the new version of the table if it is going through transform.
+     * @return the new table.
+     */
+    PTable getTransformingNewTable();
+
+    /**
      * For a table of index type, return the state of the table.
      * @return the state of the index.
      */

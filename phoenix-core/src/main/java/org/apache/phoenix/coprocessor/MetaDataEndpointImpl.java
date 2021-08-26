@@ -80,7 +80,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BY
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -89,6 +91,7 @@ import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -103,6 +106,7 @@ import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.directory.api.util.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -217,6 +221,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
+import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -793,6 +799,18 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         indexes.add(indexTable);
     }
 
+    private PTable getTransformingNewTable(PName tenantId, PName schemaName, PName tableName,
+                                           long clientTimeStamp, int clientVersion) throws IOException, SQLException {
+        byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes();
+        PTable table = doGetTable(tenantIdBytes, schemaName.getBytes(), tableName.getBytes(), clientTimeStamp,
+                null, clientVersion);
+        if (table == null) {
+            ServerUtil.throwIOException("Transforming table not found", new TableNotFoundException(schemaName.getString(), tableName.getString()));
+            return null;
+        }
+        return table;
+    }
+
     private void addExcludedColumnToTable(List<PColumn> pColumns, PName colName, PName famName, long timestamp) {
         PColumnImpl pColumn = PColumnImpl.createExcludedColumn(famName, colName, timestamp);
         pColumns.add(pColumn);
@@ -1232,6 +1250,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 (!EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme) || tableType == PTableType.VIEW) ? PTable.EncodedCQCounter.NULL_COUNTER
                         : new EncodedCQCounter();
         boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
+        SystemTransformRecord transformRecord = null;
+
         while (true) {
             results.clear();
             scanner.next(results);
@@ -1296,6 +1316,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null, baseColumnCount, isRegularView);
             }
         }
+
+        transformRecord = Transform.getTransformRecord(env.getConfiguration(), tableType, schemaName, tableName, dataTableName, tenantId, parentLogicalName);
+
+        PTable transformingNewTable = null;
+        if (transformRecord != null && transformRecord.isActive()) {
+            // New table will behave like an index
+            PName newTableNameWithoutSchema = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(transformRecord.getNewPhysicalTableName()));
+            PName newSchemaNameWithoutSchema = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName(transformRecord.getNewPhysicalTableName()));
+            transformingNewTable = getTransformingNewTable(tenantId, newSchemaNameWithoutSchema, newTableNameWithoutSchema, clientTimeStamp, clientVersion);
+        }
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return new PTableImpl.Builder()
@@ -1337,6 +1367,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
                 .setBucketNum(saltBucketNum)
                 .setIndexes(indexes == null ? Collections.<PTable>emptyList() : indexes)
+                .setTransformingNewTable(transformingNewTable)
                 .setParentSchemaName(parentSchemaName)
                 .setParentTableName(parentTableName)
                 .setBaseTableLogicalName(parentLogicalName)
@@ -2800,7 +2831,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private MetaDataMutationResult mutateColumn(
             final List<Mutation> tableMetadata,
             final ColumnMutator mutator, final int clientVersion,
-            final PTable parentTable, boolean isAddingOrDroppingColumns) throws IOException {
+            final PTable parentTable, final PTable transformingNewTable, boolean isAddingOrDroppingColumns) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -2880,6 +2911,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table,
                                 parentTable);
                     }
+                }
+                if (transformingNewTable !=null) {
+                    table = PTableImpl.builderWithColumns(table, getColumnsToClone(table))
+                            .setTransformingNewTable(transformingNewTable).build();
                 }
 
                 if (table.getTimeStamp() >= clientTimeStamp) {
@@ -3159,9 +3194,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
+            PTable transformingNewTable = request.hasTransformingNewTable() ? PTableImpl.createFromProto(request.getTransformingNewTable()) : null;
             boolean addingColumns = request.getAddingColumns();
             MetaDataMutationResult result = mutateColumn(tableMetaData, new AddColumnMutator(),
-                    request.getClientVersion(), parentTable, addingColumns);
+                    request.getClientVersion(), parentTable, transformingNewTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
@@ -3299,7 +3335,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
             MetaDataMutationResult result = mutateColumn(tableMetaData, new DropColumnMutator(env.getConfiguration()),
-                    request.getClientVersion(), parentTable, true);
+                    request.getClientVersion(), parentTable,null, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }

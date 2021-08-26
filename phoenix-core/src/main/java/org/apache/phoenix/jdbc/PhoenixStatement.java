@@ -282,10 +282,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger);
+        return executeQuery(stmt, true, queryLogger, false);
     }
+
+    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
+            throws SQLException {
+        return executeQuery(stmt, true, queryLogger, noCommit);
+    }
+
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-        final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
         
         try {
@@ -332,7 +338,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                         setLastUpdateCount(NO_UPDATE);
                         setLastUpdateOperation(stmt.getOperation());
                         // If transactional, this will move the read pointer forward
-                        if (connection.getAutoCommit()) {
+                        if (connection.getAutoCommit() && !noCommit) {
                             connection.commit();
                         }
                         connection.incrementStatementExecutionCounter();
@@ -347,7 +353,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                 e.getSchemaName(), e.getTableName(), true).wasUpdated()){
                                 //TODO we can log retry count and error for debugging in LOG table
-                                return executeQuery(stmt, false, queryLogger);
+                                return executeQuery(stmt, false, queryLogger, noCommit);
                             }
                         }
                         throw e;
