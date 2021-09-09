@@ -573,7 +573,8 @@ public enum SQLExceptionCode {
         "REGION SPLIT POLICY is incorrect."),
 
     CANNOT_TRANSFORM_ALREADY_TRANSFORMING_TABLE(909, "43M20",
-                                        "Cannot transform an index or a table who is already going through a transform.");
+                                        "Cannot transform an index or a table who is already going through a transform."),
+    CANNOT_TRANSFORM_VIEW_INDEX(910, "43M21", "Cannot transform a view index. Consider creating a new view index.");
 
     private final int errorCode;
     private final String sqlState;
