@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 
@@ -31,6 +32,10 @@ public class PVarbinary extends PBinaryBase {
 
     private PVarbinary() {
         super("VARBINARY", Types.VARBINARY, byte[].class, null, 22);
+    }
+
+    PVarbinary(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec, int ordinal) {
+        super(sqlTypeName, sqlType, clazz, codec, ordinal);
     }
 
     @Override
@@ -106,7 +111,7 @@ public class PVarbinary extends PBinaryBase {
 
     @Override
     public boolean isCoercibleTo(PDataType targetType) {
-        return equalsAny(targetType, this, PBinary.INSTANCE);
+        return equalsAny(targetType, this, PBinary.INSTANCE, PJsonB.INSTANCE);
     }
 
     @Override

@@ -52,6 +52,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -294,10 +295,18 @@ public class PhoenixUtil {
             while (resultSet.next()) {
                 Column column = new Column();
                 column.setName(resultSet.getString("COLUMN_NAME"));
-                column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME").replace(" ", "_")));
+                String typeName = resultSet.getString("TYPE_NAME").replace(" ", "_");
+                if (tableName.toLowerCase().contains("_dc") && "JSON".equals(typeName.toUpperCase())) {
+                    typeName = "JSONDC";
+                } else if (tableName.toLowerCase().contains("_binary") &&
+                        !typeName.toUpperCase().equals("INTEGER") && !typeName.toUpperCase().equals("VARCHAR")) {
+                    typeName = "JSONB";
+                }
+                column.setType(DataTypeMapping.valueOf(typeName));
                 column.setLength(resultSet.getInt("COLUMN_SIZE"));
                 columnList.add(column);
-                LOGGER.debug(String.format("getColumnsMetaData for column name : %s", column.getName()));
+                LOGGER.info(String.format("getColumnsMetaData for column name : %s", column.getName() + " resultset: " + resultSet.getString("TYPE_NAME")
+                + " " + column.getType() + " " + typeName));
             }
         } finally {
             if (null != resultSet) {
@@ -501,6 +510,27 @@ public class PhoenixUtil {
                     statement.setString(count, dataValue.getValue());
                 }
                 break;
+            case JSON:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARCHAR);
+                } else {
+                    statement.setString(count, dataValue.getValue());
+                }
+                break;
+            case JSONDC:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARCHAR);
+                } else {
+                    statement.setString(count, dataValue.getValue());
+                }
+                break;
+            case JSONB:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARCHAR);
+                } else {
+                    statement.setBytes(count, dataValue.getValue().getBytes());
+                }
+                break;
             case CHAR:
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.CHAR);
@@ -585,6 +615,22 @@ public class PhoenixUtil {
             }
             count++;
         }
+        return statement;
+    }
+
+    public PreparedStatement buildStatement2(RulesApplier rulesApplier, String tableName, Scenario scenario, List<Column> columns,
+                                            PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
+
+        statement.setInt(1, Integer.parseInt(rulesApplier.getDataForRule(scenario, columns.get(0)).getValue()));
+        statement.setString(2, rulesApplier.getDataForRule(scenario, columns.get(1)).getValue());
+        if (tableName.toUpperCase().contains("_DC")) {
+            statement.setString(3, rulesApplier.getDataForRule(scenario, columns.get(2)).getValue());
+        } else if  (tableName.toUpperCase().contains("_BINARY")) {
+            statement.setBytes(3, rulesApplier.getDataForRule(scenario, columns.get(2)).getValue().getBytes());
+        } else {
+            statement.setString(3, rulesApplier.getDataForRule(scenario, columns.get(2)).getValue());
+        }
+
         return statement;
     }
 

@@ -797,7 +797,9 @@ public class TransformTool extends Configured implements Tool {
             }
             configureJob();
             status = runJob();
-            updateTransformRecord(this.job);
+            if (status == 0) {
+                updateTransformRecord(this.job);
+            }
         }
 
         // Record status

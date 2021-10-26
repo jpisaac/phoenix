@@ -33,7 +33,10 @@ public enum DataTypeMapping {
     BOOLEAN("BOOLEAN", Types.BOOLEAN),
     BIGINT("BIGINT", Types.BIGINT),
     UNSIGNED_INT("UNSIGNED_INT", Types.INTEGER),
-    TINYINT("TINYINT", Types.TINYINT);
+    TINYINT("TINYINT", Types.TINYINT),
+    JSON("JSON", Types.VARCHAR),
+    JSONDC("JSONDC", Types.VARCHAR),
+    JSONB("JSONB", Types.VARBINARY);
 
     private final String sType;
 

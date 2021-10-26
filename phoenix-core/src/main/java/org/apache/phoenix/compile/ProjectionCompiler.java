@@ -47,6 +47,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.JsonValueDCFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ProjectedColumnExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ReplaceArrayFunctionExpressionVisitor;
@@ -726,6 +727,37 @@ public class ProjectionCompiler {
                 }
                 return func;
             } else {
+                if (node.getName().equalsIgnoreCase(JsonValueDCFunction.NAME) && node.getChildren().size() > 1){
+                    String exprName = node.getChildren().get(1).toString();
+                    exprName=exprName.replace("'","");
+                    String dynColName = exprName.substring(exprName.indexOf("$.") + "$.".length());
+                    if (dynColName.contains(".") || dynColName.contains("*") || dynColName.contains("[")) {
+                        return super.visitLeave(node,children);
+                    }
+                    children.get(0).accept(new ProjectedColumnExpressionVisitor() {
+                                               @Override
+                                               public Void visit(ProjectedColumnExpression expression) {
+                                                   PColumn col = expression.getColumn();
+                                                   PTable table = context.getCurrentTable().getTable();
+                                                   try {
+                                                       PColumn  dynColumn = table.getColumnForColumnName(col.getFamilyName() + "." +
+                                                               dynColName);
+
+                                                       if (dynColumn != null) {
+                                                           return null;
+
+                                                       }
+                                                   } catch (AmbiguousColumnException throwables) {
+                                                       throwables.printStackTrace();
+                                                   } catch (ColumnNotFoundException throwables) {
+                                                       throwables.printStackTrace();
+                                                   }
+                                                   return null;
+
+                                               }});
+
+                    }
+
                 return super.visitLeave(node,children);
             }
         }

@@ -86,6 +86,7 @@ import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -153,6 +154,36 @@ public class FromCompiler {
         }
 
     };
+
+    public static PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
+            throws SQLException {
+        if (!dynColumns.isEmpty()) {
+            List<PColumn> existingColumns = theTable.getColumns();
+            // Need to skip the salting column, as it's handled in the PTable builder call below
+            List<PColumn> allcolumns = new ArrayList<>(
+                    theTable.getBucketNum() == null ? existingColumns :
+                            existingColumns.subList(1, existingColumns.size()));
+            // Position still based on with the salting columns
+            int position = existingColumns.size();
+            PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
+            for (ColumnDef dynColumn : dynColumns) {
+                PName familyName = defaultFamilyName;
+                PName name = PNameFactory.newName(dynColumn.getColumnDefName().getColumnName());
+                String family = dynColumn.getColumnDefName().getFamilyName();
+                if (family != null) {
+                    theTable.getColumnFamily(family); // Verifies that column family exists
+                    familyName = PNameFactory.newName(family);
+                }
+                allcolumns.add(new PColumnImpl(name, familyName, dynColumn.getDataType(), dynColumn.getMaxLength(),
+                        dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, dynColumn.getExpression(), false, true, Bytes.toBytes(dynColumn.getColumnDefName().getColumnName()),
+                        HConstants.LATEST_TIMESTAMP));
+                position++;
+            }
+            theTable = PTableImpl.builderWithColumns(theTable, allcolumns)
+                    .build();
+        }
+        return theTable;
+    }
 
     public static ColumnResolver getResolverForCreation(final CreateTableStatement statement, final PhoenixConnection connection)
             throws SQLException {
@@ -224,7 +255,7 @@ public class FromCompiler {
     	if (fromNode == null)
             return new ColumnResolverWithUDF(connection, 1, true, statement.getUdfParseNodes());
         if (fromNode instanceof NamedTableNode)
-            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode, true, 1, statement.getUdfParseNodes(), alwaysHitServer, mutatingTableName);
+            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode,  statement.getSelect(), true, 1, statement.getUdfParseNodes(), alwaysHitServer, mutatingTableName);
 
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1, statement.getUdfParseNodes(), mutatingTableName);
         fromNode.accept(visitor);
@@ -415,7 +446,7 @@ public class FromCompiler {
                     .setPhysicalNames(Collections.<PName>emptyList())
                     .setNamespaceMapped(isNamespaceMapped)
                     .build();
-            theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
+            theTable = addDynamicColumns(table.getDynamicColumns(), theTable);
             alias = null;
             tableRefs = ImmutableList.of(new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty()));
             schemas = ImmutableList.of(new PSchema(theTable.getSchemaName().toString(), timeStamp));
@@ -426,25 +457,56 @@ public class FromCompiler {
         }
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
             boolean updateCacheImmediately, boolean alwaysHitServer) throws SQLException {
-          this(connection, tableNode, updateCacheImmediately, 0, new HashMap<String,UDFParseNode>(1), alwaysHitServer, null);
+          this(connection, tableNode, null, updateCacheImmediately, 0, new HashMap<String,UDFParseNode>(1), alwaysHitServer, null);
       }
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
             boolean updateCacheImmediately, int tsAddition,
             Map<String, UDFParseNode> udfParseNodes) throws SQLException {
-          this(connection, tableNode, updateCacheImmediately, tsAddition, udfParseNodes, false, null);
+          this(connection, tableNode,null, updateCacheImmediately, tsAddition, udfParseNodes, false, null);
         }
 
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
-                boolean updateCacheImmediately, int tsAddition,
+                List<AliasedNode> selectNodes, boolean updateCacheImmediately, int tsAddition,
                 Map<String, UDFParseNode> udfParseNodes, boolean alwaysHitServer, TableName mutatingTableName) throws SQLException {
             super(connection, tsAddition, updateCacheImmediately, udfParseNodes, mutatingTableName);
             alias = tableNode.getAlias();
+//            if (selectNodes != null) {
+//                for (AliasedNode selectNode : selectNodes) {
+//                    if (selectNode.getNode().getChildren().size() > 1 &&
+//                            selectNode.getNode().toString().contains(JsonValueDCFunction.NAME)) {
+//                        String cfName = selectNode.getNode().getChildren().get(0).toString();
+//                        String exprName = selectNode.getNode().getChildren().get(1).toString();
+//                        exprName=exprName.replace("'","");
+//                        String dynColName = exprName.substring(exprName.indexOf("$.") + "$.".length());
+//                        if (!dynColName.contains(".") && !dynColName.contains("*") && !dynColName.contains("[")) {
+//                            ColumnDef dynColDef = new ParseNodeFactory().columnDef(ColumnName.newColumnName(cfName, dynColName),
+//                                    PVarchar.INSTANCE.getSqlTypeName(), false, 500, 0, false, org.apache.phoenix.schema.SortOrder.ASC, dynColName, false);
+//                            tableNode.addToDynamicColumns(dynColDef);
+//                        }
+//                    }
+//                }
+//            }
             TableRef tableRef = createTableRef(tableNode.getName().getSchemaName(), tableNode, updateCacheImmediately, alwaysHitServer);
 			PSchema schema = new PSchema(tableRef.getTable().getSchemaName().toString());
             tableRefs = ImmutableList.of(tableRef);
             schemas = ImmutableList.of(schema);
         }
 
+        private void addDynamicColumnsForJson() {
+            //if (dataPlan.getTableRef().hasDynamicCols()) {
+//            List<? extends ColumnProjector> projectors = dataPlan.getProjector().getColumnProjectors();
+//            List<PDatum> targetDatums = Lists.newArrayListWithExpectedSize(projectors.size());
+//            for (ColumnProjector projector : projectors) {
+//                if (projector.getName().contains(JsonValueDCFunction.NAME)) {
+//                    String dynColName = projector.getExpression().substring(jsonPathExprStr.indexOf("$."));
+//                    if (dynColName.contains(".") || dynColName.contains("*") || dynColName.contains("[")) {
+//
+//                }
+//
+//            }
+
+            //}
+        }
         public SingleTableColumnResolver(PhoenixConnection connection, TableRef tableRef) {
             super(connection, 0, null);
             alias = tableRef.getTableAlias();
@@ -517,13 +579,14 @@ public class FromCompiler {
                         }
                     }
 			    } else { // schemaName == null && tableName != null
-                    if (tableName != null && !tableName.equals(alias) && (!tableName.equals(resolvedTableName) || !resolvedSchemaName.equals(""))) {
+			        if (tableName != null && !tableName.equals(alias) && (!tableName.equals(resolvedTableName) || !resolvedSchemaName.equals(""))) {
                         resolveCF = true;
                    }
 			    }
 
 			}
-        	PColumn column = resolveCF
+
+            PColumn column = resolveCF
         	        ? tableRef.getTable().getColumnFamily(tableName).getPColumnForColumnName(colName)
         			: tableRef.getTable().getColumnForColumnName(colName);
             return new ColumnRef(tableRef, column.getPosition());
@@ -815,36 +878,6 @@ public class FromCompiler {
                                 + tableRef.getTable().getColumns(), connection));
             }
             return tableRef;
-        }
-
-        protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
-                throws SQLException {
-            if (!dynColumns.isEmpty()) {
-                List<PColumn> existingColumns = theTable.getColumns();
-                // Need to skip the salting column, as it's handled in the PTable builder call below
-                List<PColumn> allcolumns = new ArrayList<>(
-                        theTable.getBucketNum() == null ? existingColumns :
-                                existingColumns.subList(1, existingColumns.size()));
-                // Position still based on with the salting columns
-                int position = existingColumns.size();
-                PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
-                for (ColumnDef dynColumn : dynColumns) {
-                    PName familyName = defaultFamilyName;
-                    PName name = PNameFactory.newName(dynColumn.getColumnDefName().getColumnName());
-                    String family = dynColumn.getColumnDefName().getFamilyName();
-                    if (family != null) {
-                        theTable.getColumnFamily(family); // Verifies that column family exists
-                        familyName = PNameFactory.newName(family);
-                    }
-                    allcolumns.add(new PColumnImpl(name, familyName, dynColumn.getDataType(), dynColumn.getMaxLength(),
-                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, dynColumn.getExpression(), false, true, Bytes.toBytes(dynColumn.getColumnDefName().getColumnName()),
-                        HConstants.LATEST_TIMESTAMP));
-                    position++;
-                }
-                theTable = PTableImpl.builderWithColumns(theTable, allcolumns)
-                        .build();
-            }
-            return theTable;
         }
     }
 

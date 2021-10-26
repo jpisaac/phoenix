@@ -58,6 +58,7 @@ import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -253,6 +254,7 @@ public class ScanPlan extends BaseQueryPlan {
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
         scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
+
         ResultIterator scanner;
         TableRef tableRef = this.getTableRef();
         PTable table = tableRef.getTable();
@@ -263,6 +265,7 @@ public class ScanPlan extends BaseQueryPlan {
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : QueryUtil.getOffsetLimit(limit, offset);
         boolean isOffsetOnServer = isOffsetPossibleOnServer(context, orderBy, offset, isSalted, table.getIndexType());
+
         /*
          * For queries that are doing a row key order by and are not possibly querying more than a
          * threshold worth of data, then we only need to initialize scanners corresponding to the
@@ -272,6 +275,7 @@ public class ScanPlan extends BaseQueryPlan {
                 (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY)
                         && isDataToScanWithinThreshold; 
         BaseResultIterators iterators;
+
         if (isOffsetOnServer) {
             iterators = new SerialIterators(this, perScanLimit, offset, parallelIteratorFactory, scanGrouper, scan, caches, dataPlan);
         } else if (isSerial) {
@@ -279,6 +283,7 @@ public class ScanPlan extends BaseQueryPlan {
         } else {
             iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper, scan, initFirstScanOnly, caches, dataPlan);
         }
+
         estimatedRows = iterators.getEstimatedRowCount();
         estimatedSize = iterators.getEstimatedByteCount();
         estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();

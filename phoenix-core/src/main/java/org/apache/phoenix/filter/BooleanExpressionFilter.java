@@ -109,6 +109,7 @@ abstract public class BooleanExpressionFilter extends FilterBase implements Writ
             expression.readFields(input);
             expression.reset(); // Initializes expression tree for partial evaluation
         } catch (Throwable t) { // Catches incompatibilities during reading/writing and doesn't retry
+            expression.readFields(input);
             ServerUtil.throwIOException("BooleanExpressionFilter failed during reading", t);
         }
     }

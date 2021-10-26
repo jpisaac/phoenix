@@ -20,16 +20,23 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
@@ -69,6 +76,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.SelectStatementRewriter;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -692,13 +700,16 @@ public class QueryCompiler {
             boolean inUnion) throws SQLException {
         boolean isApplicable = true;
         PTable projectedTable = null;
+
+        select = SelectStatementRewriter.rewriteForJson(context, select);
+        System.out.println("GOKCEN select with dyn col " + select.toString());
         if (this.projectTuples) {
             projectedTable = TupleProjectionCompiler.createProjectedTable(select, context);
             if (projectedTable != null) {
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), select.getUdfParseNodes()));
             }
         }
-        
+
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
@@ -714,9 +725,9 @@ public class QueryCompiler {
         try {
             compiledOffset = OffsetCompiler.getOffsetCompiler().compile(context, select, inJoin, inUnion);
             offset = compiledOffset.getIntegerOffset().orNull();
-        } catch(RowValueConstructorOffsetNotCoercibleException e){
+        } catch (RowValueConstructorOffsetNotCoercibleException e) {
             //This current plan is not executable
-            compiledOffset = new CompiledOffset(Optional.<Integer>absent(),Optional.<byte[]>absent());
+            compiledOffset = new CompiledOffset(Optional.<Integer>absent(), Optional.<byte[]>absent());
             isApplicable = false;
         }
 
@@ -728,9 +739,9 @@ public class QueryCompiler {
         // Don't pass groupBy when building where clause expression, because we do not want to wrap these
         // expressions as group by key expressions since they're pre, not post filtered.
         if (innerPlan == null && !tableRef.equals(resolver.getTables().get(0))) {
-        	context.setResolver(FromCompiler.getResolver(context.getConnection(), tableRef, select.getUdfParseNodes()));
+            context.setResolver(FromCompiler.getResolver(context.getConnection(), tableRef, select.getUdfParseNodes()));
         }
-        Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode> newHashSet();
+        Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode>newHashSet();
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries, compiledOffset.getByteOffset());
         // Recompile GROUP BY now that we've figured out our ScanRanges so we know
         // definitively whether or not we'll traverse in row key order.
@@ -769,20 +780,21 @@ public class QueryCompiler {
                     new TupleProjector(projectedTable), wildcardIncludesDynamicCols &&
                             projector.projectDynColsInWildcardQueries());
         }
-        
+
         QueryPlan plan = innerPlan;
         QueryPlan dataPlan = dataPlans.get(tableRef);
         if (plan == null) {
             ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
             plan = select.getFrom() == null
                     ? new LiteralResultIterationPlan(context, select, tableRef, projector, limit, offset, orderBy,
-                            parallelIteratorFactory)
+                    parallelIteratorFactory)
                     : (select.isAggregate() || select.isDistinct()
-                            ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
-                                    parallelIteratorFactory, groupBy, having, dataPlan)
-                            : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
-                                    parallelIteratorFactory, allowPageFilter, dataPlan, compiledOffset.getByteOffset()));
+                    ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
+                    parallelIteratorFactory, groupBy, having, dataPlan)
+                    : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                    parallelIteratorFactory, allowPageFilter, dataPlan, compiledOffset.getByteOffset()));
         }
+
         SelectStatement planSelect = asSubquery ? select : this.select;
         if (!subqueries.isEmpty()) {
             int count = subqueries.size();
@@ -801,14 +813,14 @@ public class QueryCompiler {
             }
             plan = select.isAggregate() || select.isDistinct()
                     ? new ClientAggregatePlan(context, planSelect, tableRef, projector, limit, offset, where, orderBy,
-                            groupBy, having, plan)
+                    groupBy, having, plan)
                     : new ClientScanPlan(context, planSelect, tableRef, projector, limit, offset, where, orderBy, plan);
-
         }
 
-        if(plan instanceof BaseQueryPlan){
+        if (plan instanceof BaseQueryPlan) {
             ((BaseQueryPlan) plan).setApplicable(isApplicable);
         }
+
         return plan;
     }
 }

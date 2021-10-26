@@ -33,7 +33,11 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableList;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -106,11 +110,14 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.UpsertColumnsValuesMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PJsonDC;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -120,9 +127,11 @@ import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class UpsertCompiler {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(UpsertCompiler.class);
     private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes,
             PTable table, MultiRowMutationState mutation, PhoenixStatement statement, boolean useServerTimestamp,
             IndexMaintainer maintainer, byte[][] viewConstants, byte[] onDupKeyBytes, int numSplColumns,
@@ -140,6 +149,7 @@ public class UpsertCompiler {
         }
         Long rowTimestamp = null; // case when the table doesn't have a row timestamp column
         RowTimestampColInfo rowTsColInfo = new RowTimestampColInfo(useServerTimestamp, rowTimestamp);
+        Integer positionToAddDynCols = numSplColumns+1;
         for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
             byte[] value = values[j];
             PColumn column = table.getColumns().get(columnIndexes[i]);
@@ -165,6 +175,13 @@ public class UpsertCompiler {
             } else {
                 columnValues.put(column, value);
                 columnValueSize += (column.getEstimatedSize() + value.length);
+                if (column.getDataType() == PJsonDC.INSTANCE) {
+                    columnValueSize += addDynamicColumnsForTopJson(columnValues, table, value, column, positionToAddDynCols);
+                } else {
+                    if (table.getName().getString().toUpperCase().contains("_DC") && column.getName().getString().toUpperCase().contains("JSON")) {
+                       LOGGER.info("GOKCEN column type for " + table.getName().getString() + " " + column.getDataType().toString());
+                    }
+                }
             }
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
@@ -184,6 +201,29 @@ public class UpsertCompiler {
             }
         } 
         mutation.put(ptr, new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
+    }
+
+    public static int addDynamicColumnsForTopJson(Map<PColumn,byte[]> columnValues, PTable table, byte[] jsonValue, PColumn column, Integer position) {
+        String jsonData = new String(jsonValue);
+        JsonParser parser = new JsonParser();
+        JsonElement jsonElement = parser.parse(jsonData);
+        JsonObject jsonNode = jsonElement.getAsJsonObject();
+        PName cf = column.getName();
+        int size = 0;
+        Set<Map.Entry<String, JsonElement>> entries = jsonNode.entrySet();//will return members of your object
+        for (Map.Entry<String, JsonElement> entry: entries) {
+            JsonElement element = entry.getValue();
+            if (element.isJsonPrimitive() && !element.isJsonNull()) {
+                // TODO: .s and other tokens must be removed
+                PName colName = PNameFactory.newName(entry.getKey().toUpperCase());
+                PColumn dynCol = new PColumnImpl(colName, cf, PVarchar.INSTANCE, column.getMaxLength(), column.getScale(),
+                        true, position++, column.getSortOrder(), 0, null, false, null, false, true, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
+                byte[] value = element.getAsString().getBytes();
+                columnValues.put(dynCol, value);
+                size += (dynCol.getEstimatedSize() + value.length);
+            }
+        }
+        return size;
     }
 
     public static String getExceedMaxHBaseClientKeyValueAllowanceRowkeyAndColumnInfo(
@@ -400,7 +440,8 @@ public class UpsertCompiler {
                         QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_UPSERT_MUTATIONS);
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
         boolean useServerTimestampToBe = false;
-        
+
+        LOGGER.info("GOKCEN upsert:" + upsert.toString() + " " + columnNodes.toString() + " values:" + valueNodes.toString());
 
         resolver = FromCompiler.getResolverForMutation(upsert, connection);
         tableRefToBe = resolver.getTables().get(0);

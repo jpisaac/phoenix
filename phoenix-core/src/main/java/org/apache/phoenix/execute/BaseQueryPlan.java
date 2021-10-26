@@ -61,6 +61,7 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -259,12 +260,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
         
         ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
-        
+
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
-        
+
         if (dynamicFilter != null) {
             WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), null,
                     Optional.<byte[]>absent());
@@ -275,7 +276,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
             // After HBASE-16296 is resolved, we no longer need to set
             // scan caching
         }
-        
 
         PhoenixConnection connection = context.getConnection();
         final int smallScanThreshold = connection.getQueryServices().getProps().getInt(QueryServices.SMALL_SCAN_THRESHOLD_ATTRIB,
@@ -358,12 +358,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 serializeViewConstantsIntoScan(scan, dataTable);
             }
         }
-        
+
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Scan on table " + context.getCurrentTable().getTable().getName() + " ready for iteration: " + scan, connection));
         }
-        
+
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(

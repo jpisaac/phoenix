@@ -24,6 +24,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQ
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.sql.Connection;
 import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -37,6 +38,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 
@@ -44,9 +46,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
@@ -316,20 +322,24 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                         Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                         connection.getMutationState().sendUncommitted(tableRefs);
                         plan = connection.getQueryServices().getOptimizer().optimize(PhoenixStatement.this, plan);
-                         // this will create its own trace internally, so we don't wrap this
+
+                        // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
                         ResultIterator resultIterator = plan.iterator();
+
                         if (LOGGER.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
                             LOGGER.debug(LogUtil.addCustomAnnotations(
                                     "Explain plan: " + explainPlan, connection));
                         }
+
                         StatementContext context = plan.getContext();
                         context.setQueryLogger(queryLogger);
                         if(queryLogger.isDebugEnabled()){
                             queryLogger.log(QueryLogInfo.EXPLAIN_PLAN_I, QueryUtil.getExplainPlan(resultIterator));
                             queryLogger.log(QueryLogInfo.GLOBAL_SCAN_DETAILS_I, context.getScan()!=null?context.getScan().toString():null);
                         }
+
                         context.getOverallQueryMetrics().startQuery();
                         PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
                         resultSets.add(rs);
@@ -337,6 +347,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                         setLastResultSet(rs);
                         setLastUpdateCount(NO_UPDATE);
                         setLastUpdateOperation(stmt.getOperation());
+
                         // If transactional, this will move the read pointer forward
                         if (connection.getAutoCommit() && !noCommit) {
                             connection.commit();
@@ -384,7 +395,34 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
-    
+
+    public static void printScan(Connection connection, Scan scan, String tableName, String tag) {
+        try {
+            if (tableName.contains("N0")) {
+                org.apache.hadoop.hbase.client.Table
+                        hTable = connection.unwrap(PhoenixConnection.class).getQueryServices().getTable(
+                        tableName.getBytes());
+                ResultScanner scanner = null;
+
+                scanner = hTable.getScanner(scan);
+
+                for (Result result = scanner.next(); result != null; result = scanner.next()) {
+                    for (Cell cell : result.rawCells()) {
+                        String cellString = cell.toString();
+                        for (Map.Entry<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> entryF : result.getMap()
+                                .entrySet()) {
+                            byte[] family = entryF.getKey();
+                        }
+                        System.out.println("GOKCENPS" + tag + " " + cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    }
+                }
+            }
+        } catch (Exception e) {
+
+        }
+
+    }
+
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
       return executeMutation(stmt, true);
     }
@@ -488,7 +526,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement phoenixStatement, Sequence.ValueOp seqAction) throws SQLException {
-            if(!getUdfParseNodes().isEmpty()) {
+            if (!getUdfParseNodes().isEmpty()) {
                 phoenixStatement.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
             }
 
@@ -507,7 +545,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             queryPlan.getContext().getSequenceManager().validateSequences(seqAction);
             return queryPlan;
         }
-
     }
     
     private static final byte[] EXPLAIN_PLAN_FAMILY = QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -1851,7 +1888,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Execute query: " + sql, connection));
         }
-        
+
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);

@@ -274,11 +274,12 @@ public class WriteWorkload implements Workload {
                         logPerNRows = Integer.valueOf(customizedLogPerNRows);
                     }
                     last = start = EnvironmentEdgeManager.currentTimeMillis();
-                    String sql = pUtil.buildSql(columns, tableName);
+                    //String sql = pUtil.buildSql(columns, tableName);
+                    String sql = "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (?,?,?)";
                     stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((EnvironmentEdgeManager.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
-                        stmt = pUtil.buildStatement(rulesApplier, scenario, columns, stmt, simpleDateFormat);
+                        stmt = pUtil.buildStatement2(rulesApplier, tableName, scenario, columns, stmt, simpleDateFormat);
                         if (useBatchApi) {
                             stmt.addBatch();
                         } else {

@@ -64,8 +64,14 @@ public class SchemaReader {
         try {
             connection = pUtil.getConnection(null);
             for (Path file : resourceList) {
-                LOGGER.info("\nApplying schema to file: " + file);
-                pUtil.executeStatement(resourceToString(file), connection);
+                LOGGER.info("\nApplying schema to file: " + file + " " + resourceToString(file));
+//                if (file.toString().contains("_dc")) {
+//                    connection.createStatement().execute("create table if not exists PHERF.TBL_JSON_DC (pk integer primary key, col varchar, jsoncol.jsoncol jsondc)");
+//                } else if (file.toString().contains("_binary")) {
+//                    connection.createStatement().execute("create table if not exists PHERF.TBL_JSON_BINARY (pk integer primary key, col varchar, jsoncol.jsoncol jsonb)");
+//                } else {
+                    pUtil.executeStatement(resourceToString(file), connection);
+//                }
             }
         } finally {
             if (connection != null) {

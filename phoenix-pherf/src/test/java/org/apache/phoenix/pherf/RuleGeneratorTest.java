@@ -53,6 +53,8 @@ public class RuleGeneratorTest {
 
     @Test
     public void testDateGenerator() throws Exception {
+        DataTypeMapping dt = DataTypeMapping.valueOf("JSONDC");
+
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
         WriteWorkload loader = new WriteWorkload(parser);

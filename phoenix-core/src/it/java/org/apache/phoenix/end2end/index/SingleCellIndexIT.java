@@ -473,7 +473,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                             .entrySet()) {
                         byte[] family = entryF.getKey();
                     }
-                    System.out.println(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    System.out.println(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)) + " " + Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
                 }
             }
         }

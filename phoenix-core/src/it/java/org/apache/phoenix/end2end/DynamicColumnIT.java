@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -236,21 +237,22 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 stmt.executeUpdate();
                 conn.commit();
             }
-            dml = "UPSERT INTO " + tableName + "(entry, F, A.F1V1, A.F1v2, B.F2V1, DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+            dml = "UPSERT INTO " + tableName + "(entry, F, A.F1V1, A.F1v2, B.F2V1, DYNCOL1 INTEGER, DYNCOL2 VARCHAR) VALUES (?, ?, ?, ?, ?, ?, ?)";
             try (PreparedStatement stmt = conn.prepareStatement(dml)) {
                 stmt.setString(1, "dynentry");
                 stmt.setString(2, "a");
                 stmt.setString(3, "b");
                 stmt.setString(4, "c");
                 stmt.setString(5, "d");
-                stmt.setString(6, "e");
+                stmt.setInt(6, 1);
                 stmt.setString(7, "f");
                 stmt.executeUpdate();
                 conn.commit();
             }
             
             // test dynamic column in where clause
-            String query = "SELECT entry, F from " + tableName + " (DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) " + " WHERE DYNCOL1 = ?";
+            String query = "SELECT entry, F from " + tableName + " (DYNCOL1 INTEGER, DYNCOL2 VARCHAR) " + " WHERE DYNCOL1 = ?";
             try (PreparedStatement stmt = conn.prepareStatement(query)) {
                 stmt.setString(1, "e");
                 ResultSet rs = stmt.executeQuery();
@@ -259,7 +261,9 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 assertEquals("a", rs.getString(2));
                 assertFalse(rs.next());
             }
-            
+
+            SingleCellIndexIT.dumpTable(tableName);
+            org.junit.Assert.fail();
             // test dynamic column with projection
             query = "SELECT entry, dyncol1, dyncol2 from " + tableName + " (DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) ";
             try (PreparedStatement stmt = conn.prepareStatement(query)) {
@@ -277,4 +281,92 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testDynamicColumnOnNewView() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName +
+                "   (table_name varchar not null," +
+                "    entry varchar not null," +
+                "    F varchar," +
+                "    A.F1v1 varchar," +
+                "    A.F1v2 varchar," +
+                "    B.F2v1 varchar" +
+                "    CONSTRAINT pk PRIMARY KEY (table_name, entry))";
+        String dml = "UPSERT INTO " + tableName + " values (?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                stmt.setString(1, "tbl1");
+                stmt.setString(2, "entry");
+                stmt.setString(3, "a");
+                stmt.setString(4, "b");
+                stmt.setString(5, "c");
+                stmt.setString(6, "d");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+
+            conn.createStatement().execute("CREATE view VIEW1 as select * from " + tableName + " where table_name='tbl1'");
+
+            dml = "UPSERT INTO " + tableName + "(table_name, entry, F, A.F1V1, A.F1v2, B.F2V1, DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                stmt.setString(1, "tbl1");
+                stmt.setString(2, "dynentry");
+                stmt.setString(3, "a");
+                stmt.setString(4, "b");
+                stmt.setString(5, "c");
+                stmt.setString(6, "d");
+                stmt.setString(7, "e");
+                stmt.setString(8, "f");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+
+            dml = "UPSERT INTO view1 (entry, F, A.F1V1, A.F1v2, B.F2V1, DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                //stmt.setString(1, "tbl1");
+                stmt.setString(1, "vw_dynentry");
+                stmt.setString(2, "vw_a");
+                stmt.setString(3, "vw_b");
+                stmt.setString(4, "vw_c");
+                stmt.setString(5, "vw_d");
+                stmt.setString(6, "vw_e");
+                stmt.setString(7, "vw_f");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+
+            // test dynamic column in where clause
+            String query = "SELECT entry, F from view1 (DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) " + " WHERE DYNCOL1 = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                stmt.setString(1, "e");
+                ResultSet rs = stmt.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("dynentry", rs.getString(1));
+                assertEquals("a", rs.getString(2));
+                assertFalse(rs.next());
+            }
+
+            SingleCellIndexIT.dumpTable(tableName);
+            //org.junit.Assert.fail();
+            // test dynamic column with projection
+            query = "SELECT entry, dyncol1, dyncol2 from view1 (DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) ";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                ResultSet rs = stmt.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("dynentry", rs.getString(1));
+                assertEquals("e", rs.getString(2));
+                assertEquals("f", rs.getString(3));
+                assertTrue(rs.next());
+                assertEquals("entry", rs.getString(1));
+                assertEquals(null, rs.getString(2));
+                assertEquals(null, rs.getString(3));
+                assertTrue(rs.next());
+                assertEquals("vw_dynentry", rs.getString(1));
+                assertEquals("vw_e", rs.getString(2));
+                assertEquals("vw_f", rs.getString(3));
+                assertFalse(rs.next());
+            }
+        }
+    }
 }

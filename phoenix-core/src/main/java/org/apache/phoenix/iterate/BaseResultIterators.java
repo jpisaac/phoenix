@@ -92,6 +92,7 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -275,6 +276,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     }
                 }
             }
+
             // Add FirstKeyOnlyFilter if there are no references to key value columns
             if (keyOnlyFilter) {
                 ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
@@ -283,7 +285,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (perScanLimit != null) {
                 ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
             }
-            
+
             if(offset!=null){
                 ScanUtil.addOffsetAttribute(scan, offset);
             }
@@ -303,6 +305,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
                     }
             }
+
             scan.setAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME, new byte[]{table.getEncodingScheme().getSerializedMetadataValue()});
             scan.setAttribute(BaseScannerRegionObserver.IMMUTABLE_STORAGE_ENCODING_SCHEME, new byte[]{table.getImmutableStorageScheme().getSerializedMetadataValue()});
             // we use this flag on the server side to determine which value column qualifier to use in the key value we return from server.
@@ -312,6 +315,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (!ScanUtil.isAnalyzeTable(scan)) {
                 setQualifierRanges(keyOnlyFilter, table, scan, context);
             }
+
             if (optimizeProjection) {
                 optimizeProjection(context, scan, table, statement);
             }

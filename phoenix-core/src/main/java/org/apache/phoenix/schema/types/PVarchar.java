@@ -36,6 +36,10 @@ public class PVarchar extends PDataType<String> {
         super("VARCHAR", Types.VARCHAR, String.class, null, 0);
     }
 
+    PVarchar(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec, int ordinal) {
+        super(sqlTypeName, sqlType, clazz, codec, ordinal);
+    }
+
     @Override
     public byte[] toBytes(Object object) {
         // TODO: consider using avro UTF8 object instead of String
@@ -77,13 +81,18 @@ public class PVarchar extends PDataType<String> {
         if (equalsAny(actualType, this, PChar.INSTANCE)) {
             String s = (String) object;
             return s == null || s.length() > 0 ? s : null;
+        } else if (equalsAny(actualType, PJson.INSTANCE, PJsonDC.INSTANCE, PVarchar.INSTANCE)) {
+            if (object == null) {
+                return null;
+            }
+            return object.toString();
         }
         return throwConstraintViolationException(actualType, this);
     }
 
     @Override
     public boolean isCoercibleTo(PDataType targetType) {
-        return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE);
+        return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE, PJson.INSTANCE, PJsonDC.INSTANCE);
     }
 
     @Override
