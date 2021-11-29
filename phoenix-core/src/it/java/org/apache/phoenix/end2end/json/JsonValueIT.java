@@ -17,13 +17,16 @@
  */
 package org.apache.phoenix.end2end.json;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -1003,7 +1006,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testSimpleJsonBQuery() throws SQLException {
+    public void testSimpleJsonBQuery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1028,6 +1031,43 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals("Water polo", rs.getString(3));
             assertEquals("[\"Sport\",\"Water polo\"]", rs.getString(4));
             assertEquals("{\"address\":{\"county\":\"Avon\",\"town\":\"Bristol\",\"country\":\"England\"},\"type\":1,\"tags\":[\"Sport\",\"Water polo\"]}", rs.getString(5));
+            assertFalse(rs.next());
+
+            // Now check for empty match
+            query = String.format(queryTemplate, "Windsors");
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSimpleBsonQuery() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol bson)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, JsonDoc1);
+            stmt.execute();
+            conn.commit();
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+
+            String queryTemplate ="SELECT BSON_VALUE(jsoncol, '$.type'), BSON_VALUE(jsoncol, '$.info.address.town'), " +
+                "BSON_VALUE(jsoncol, '$.info.tags[1]'), BSON_VALUE(jsoncol, '$.info.tags'), BSON_VALUE(jsoncol, '$.info') " +
+                " FROM " + tableName +
+                " WHERE BSON_VALUE(jsoncol, '$.name') = '%s'";
+            String query = String.format(queryTemplate, "AndersenFamily");
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Basic", rs.getString(1));
+            assertEquals("Bristol", rs.getString(2));
+            assertEquals("Water polo", rs.getString(3));
+            // returned format is different
+            //assertEquals("[\"Sport\",\"Water polo\"]", rs.getString(4));
+            //assertEquals("{\"address\":{\"county\":\"Avon\",\"town\":\"Bristol\",\"country\":\"England\"},\"type\":1,\"tags\":[\"Sport\",\"Water polo\"]}", rs.getString(5));
             assertFalse(rs.next());
 
             // Now check for empty match
