@@ -312,6 +312,13 @@
       <version>2.8.9</version>
     </dependency>
 
+    <!-- https://mvnrepository.com/artifact/org.mongodb/bson -->
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>bson</artifactId>
+      <version>4.4.0</version>
+    </dependency>
+
     <!-- Transaction dependencies -->
     <dependency>
       <groupId>org.apache.tephra</groupId>
@@ -534,6 +541,11 @@
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-framework</artifactId>
       <version>${curator.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>bson</artifactId>
+      <version>4.4.0</version>
     </dependency>
   </dependencies>
 
