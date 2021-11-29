@@ -303,7 +303,7 @@ public class WriteWorkload implements Workload {
                             duration = EnvironmentEdgeManager.currentTimeMillis() - last;
                             LOGGER.info("Writer (" + Thread.currentThread().getName()
                                     + ") committed Batch. Total " + getBatchSize()
-                                    + " rows for this thread (" + this.hashCode() + ") in ("
+                                    + " rows for this thread (" + tableName + ") in ("
                                     + duration + ") Ms");
 
                             if (i % logPerNRows == 0 && i != 0) {

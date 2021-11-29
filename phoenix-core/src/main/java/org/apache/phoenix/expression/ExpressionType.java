@@ -196,8 +196,10 @@ public enum ExpressionType {
     JsonValueFunction(JsonValueFunction.class),
     JsonValueDCFunction(JsonValueDCFunction.class),
     JsonQueryDCFunction(org.apache.phoenix.expression.function.JsonQueryDCFunction.class),
-    JsonValueBFunction(org.apache.phoenix.expression.function.JsonValueBFunction.class)
-
+    JsonValueBFunction(org.apache.phoenix.expression.function.JsonValueBFunction.class),
+    JsonModifyFunction(JsonModifyFunction.class),
+    JsonModifyDCFunction(org.apache.phoenix.expression.function.JsonModifyDCFunction.class),
+    JsonModifyBFunction(JsonModifyBFunction.class),
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

@@ -73,15 +73,20 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -610,8 +615,34 @@ public class UpsertCompiler {
             }
         }
         boolean isAutoCommit = connection.getAutoCommit();
-        if (valueNodes == null) {
+        boolean isFunctionEvalNeeded = false;
+        List<AliasedNode> nodesForFunctions = newArrayListWithCapacity(1);
+        List<ParseNode> whereNodes = newArrayListWithCapacity(1);
+        int idx=0;
+        for (ParseNode valueNode : valueNodes) {
+            PColumn column = table.getColumns().get(idx);
+            ColumnParseNode cpn = new ParseNodeFactory().column(null, column.getName().getString(), null);
+            if (SchemaUtil.isPKColumn(column)) {
+                whereNodes.add(new ParseNodeFactory().equal(cpn, valueNodes.get(idx)));
+            }
+            nodesForFunctions.add(new AliasedNode(null, cpn));
+            if (!valueNode.isStateless()) {
+                // Function
+                runOnServer = true;
+                isFunctionEvalNeeded = true;
+            }
+            idx++;
+        }
+        SelectStatement selectForEvaluation = null;
+        if (isFunctionEvalNeeded) {
+            selectForEvaluation = SelectStatement.create(SelectStatement.SELECT_ONE, tableNode, nodesForFunctions);
+            selectForEvaluation.combine((new ParseNodeFactory().and(whereNodes)));
+        }
+        if (valueNodes == null || isFunctionEvalNeeded) {
             SelectStatement select = upsert.getSelect();
+            if (select == null && isFunctionEvalNeeded) {
+                select = selectForEvaluation;
+            }
             assert(select != null);
             select = SubselectRewriter.flatten(select, connection);
             ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection, false, upsert.getTable().getName());
@@ -717,12 +748,15 @@ public class UpsertCompiler {
             throw new UpsertColumnsValuesMismatchException(schemaName, tableName,
               "Numbers of columns: " + nColumnsToSet + ". Number of values: " + nValuesToSet);
         }
+
         final QueryPlan originalQueryPlan = queryPlanToBe;
         RowProjector projectorToBe = null;
         // Optimize only after all checks have been performed
-        if (valueNodes == null) {
+        if (valueNodes == null || isFunctionEvalNeeded) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
+            //runOnServer = true;
+            isFunctionEvalNeeded = false;
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;
@@ -737,16 +771,17 @@ public class UpsertCompiler {
         if (table.getRowTimestampColPos() == -1 && useServerTimestamp) {
             throw new IllegalStateException("For a table without row timestamp column, useServerTimestamp cannot be true");
         }
+
         // TODO: break this up into multiple functions
         ////////////////////////////////////////////////////////////////////
         // UPSERT SELECT
         /////////////////////////////////////////////////////////////////////
-        if (valueNodes == null) {
+        if (valueNodes == null || isFunctionEvalNeeded) {
             // Before we re-order, check that for updatable view columns
             // the projected expression either matches the column name or
             // is a constant with the same required value.
             throwIfNotUpdatable(tableRef, overlapViewColumnsToBe, targetColumns, projector, sameTable);
-            
+
             ////////////////////////////////////////////////////////////////////
             // UPSERT SELECT run server-side (maybe)
             /////////////////////////////////////////////////////////////////////
@@ -871,7 +906,7 @@ public class UpsertCompiler {
         // and initialize them in one batch
         for (ParseNode valueNode : valueNodes) {
             if (!valueNode.isStateless()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
+             //   throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
             }
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
             expressionBuilder.setColumn(column);

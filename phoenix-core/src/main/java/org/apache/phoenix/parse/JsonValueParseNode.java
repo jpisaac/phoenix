@@ -22,6 +22,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.JsonModifyFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.schema.types.PDataType;
@@ -35,9 +36,10 @@ import java.text.Format;
 import java.util.List;
 
 public class JsonValueParseNode extends FunctionParseNode {
-
+    private String name;
     public JsonValueParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(name, children, info);
+        this.name = name;
     }
 
     @Override
@@ -47,6 +49,10 @@ public class JsonValueParseNode extends FunctionParseNode {
         if (!dataType.isCoercibleTo(PVarchar.INSTANCE) || !dataType.isCoercibleTo(PJson.INSTANCE)) {
             throw new SQLException(dataType + " type is unsupported for JSON_VALUE().");
         }
-        return new JsonValueFunction(children, jsonPath);
+        if (name.equalsIgnoreCase(JsonModifyFunction.NAME)) {
+            return new JsonModifyFunction(children, jsonPath,  (String)((LiteralExpression)children.get(2)).getValue());
+        } else {
+            return new JsonValueFunction(children, jsonPath);
+        }
     }
 }

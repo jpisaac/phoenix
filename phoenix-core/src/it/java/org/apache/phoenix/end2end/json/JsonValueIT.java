@@ -834,6 +834,44 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testSimpleJsonModify() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (1,2, '" + JsonDoc1 + "')");
+            conn.commit();
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.address.town', 'Manchester')) ";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            SingleCellIndexIT.dumpTable(tableName);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"Water polo\", \"Books\"]')) ");
+            conn.commit();
+
+            String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
+                    "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_VALUE(jsoncol, '$.info.tags'), JSON_VALUE(jsoncol, '$.info') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
+            String query = String.format(queryTemplate, "AndersenFamily");
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Basic", rs.getString(1));
+            assertEquals("Manchester", rs.getString(2));
+            assertEquals("Water polo", rs.getString(3));
+            assertEquals("[\"Sport\",\"Water polo\",\"Books\"]", rs.getString(4));
+            assertEquals("{\"type\":1,\"address\":{\"town\":\"Manchester\",\"county\":\"Avon\",\"country\":\"England\"},\"tags\":[\"Sport\",\"Water polo\",\"Books\"]}", rs.getString(5));
+            assertFalse(rs.next());
+
+            // Now check for empty match
+            query = String.format(queryTemplate, "Windsors");
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testSimpleJsonQueryDC() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
