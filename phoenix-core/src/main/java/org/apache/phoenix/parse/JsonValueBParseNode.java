@@ -21,6 +21,9 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.JsonModifyBFunction;
+import org.apache.phoenix.expression.function.JsonModifyDCFunction;
+import org.apache.phoenix.expression.function.JsonModifyFunction;
 import org.apache.phoenix.expression.function.JsonValueBFunction;
 import org.apache.phoenix.expression.function.JsonValueDCFunction;
 import org.apache.phoenix.schema.types.PDataType;
@@ -32,9 +35,10 @@ import java.sql.SQLException;
 import java.util.List;
 
 public class JsonValueBParseNode extends FunctionParseNode {
-
+    private String name;
     public JsonValueBParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(name, children, info);
+        this.name = name;
     }
 
     @Override
@@ -44,6 +48,10 @@ public class JsonValueBParseNode extends FunctionParseNode {
         if (!dataType.isCoercibleTo(PJsonB.INSTANCE)) {
             throw new SQLException(dataType + " type is unsupported for JSON_VALUE_B().");
         }
-        return new JsonValueBFunction(children, jsonPath);
+        if (name.equalsIgnoreCase(JsonModifyBFunction.NAME)) {
+            return new JsonModifyBFunction(children, jsonPath,  (String)((LiteralExpression)children.get(2)).getValue());
+        } else {
+            return new JsonValueBFunction(children, jsonPath);
+        }
     }
 }

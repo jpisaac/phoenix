@@ -25,6 +25,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.bson.BsonArray;
 import org.bson.BsonDocument;
@@ -44,7 +45,7 @@ import java.util.regex.Pattern;
  */
 @FunctionParseNode.BuiltInFunction(name = BsonValueFunction.NAME, nodeClass = BsonValueParseNode.class,
         args = {
-                @FunctionParseNode.Argument(allowedTypes = { PBson.class }),
+                @FunctionParseNode.Argument(allowedTypes = { PBson.class, PVarbinary.class}),
                 @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
 public class BsonValueFunction extends ScalarFunction {
 

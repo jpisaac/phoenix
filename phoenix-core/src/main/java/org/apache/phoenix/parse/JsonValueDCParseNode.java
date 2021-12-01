@@ -21,6 +21,8 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.JsonModifyDCFunction;
+import org.apache.phoenix.expression.function.JsonModifyFunction;
 import org.apache.phoenix.expression.function.JsonValueDCFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.schema.types.PDataType;
@@ -30,9 +32,10 @@ import java.sql.SQLException;
 import java.util.List;
 
 public class JsonValueDCParseNode extends FunctionParseNode {
-
+    private String name;
     public JsonValueDCParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(name, children, info);
+        this.name = name;
     }
 
     @Override
@@ -42,6 +45,10 @@ public class JsonValueDCParseNode extends FunctionParseNode {
         if (!dataType.isCoercibleTo(PVarchar.INSTANCE)) {
             throw new SQLException(dataType + " type is unsupported for JSON_VALUE().");
         }
-        return new JsonValueDCFunction(children, jsonPath);
+        if (name.equalsIgnoreCase(JsonModifyDCFunction.NAME)) {
+            return new JsonModifyDCFunction(children, jsonPath,  (String)((LiteralExpression)children.get(2)).getValue());
+        } else {
+            return new JsonValueDCFunction(children, jsonPath);
+        }
     }
 }

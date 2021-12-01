@@ -298,6 +298,8 @@ public class PhoenixUtil {
                 String typeName = resultSet.getString("TYPE_NAME").replace(" ", "_");
                 if (tableName.toLowerCase().contains("_dc") && "JSON".equals(typeName.toUpperCase())) {
                     typeName = "JSONDC";
+                } else if (tableName.toLowerCase().contains("_bson") && "BSON".equals(typeName.toUpperCase())) {
+                    typeName = "BSON";
                 } else if (tableName.toLowerCase().contains("_binary") &&
                         !typeName.toUpperCase().equals("INTEGER") && !typeName.toUpperCase().equals("VARCHAR")) {
                     typeName = "JSONB";
@@ -524,6 +526,13 @@ public class PhoenixUtil {
                     statement.setString(count, dataValue.getValue());
                 }
                 break;
+            case BSON:
+                    if (dataValue.getValue().equals("")) {
+                        statement.setNull(count, Types.VARCHAR);
+                    } else {
+                        statement.setString(count, dataValue.getValue());
+                    }
+                    break;
             case JSONB:
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.VARCHAR);
@@ -627,6 +636,12 @@ public class PhoenixUtil {
             statement.setString(3, rulesApplier.getDataForRule(scenario, columns.get(2)).getValue());
         } else if  (tableName.toUpperCase().contains("_BINARY")) {
             statement.setBytes(3, rulesApplier.getDataForRule(scenario, columns.get(2)).getValue().getBytes());
+        } else if  (tableName.toUpperCase().contains("_BSON")) {
+            Column col = new Column();
+            col.setName(columns.get(2).getName());
+            col.setLength(columns.get(2).getLength());
+            col.setType(DataTypeMapping.BSON);
+            statement.setString(3, rulesApplier.getDataForRule(scenario, col).getValue());
         } else {
             statement.setString(3, rulesApplier.getDataForRule(scenario, columns.get(2)).getValue());
         }

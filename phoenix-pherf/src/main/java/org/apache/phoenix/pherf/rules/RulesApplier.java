@@ -216,6 +216,7 @@ public class RulesApplier {
             case JSON:
             case JSONB:
             case JSONDC:
+            case BSON:
             case CHAR:
                 // Use the specified data values from configs if they exist
                 if (DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
@@ -558,6 +559,7 @@ public class RulesApplier {
             case JSON:
             case JSONB:
             case JSONDC:
+            case BSON:
             case VARBINARY:
             case CHAR:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {

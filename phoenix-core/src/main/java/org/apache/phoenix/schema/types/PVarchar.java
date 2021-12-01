@@ -92,7 +92,7 @@ public class PVarchar extends PDataType<String> {
 
     @Override
     public boolean isCoercibleTo(PDataType targetType) {
-        return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE, PJson.INSTANCE, PJsonDC.INSTANCE);
+        return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE, PJson.INSTANCE, PJsonDC.INSTANCE, PJsonB.INSTANCE);
     }
 
     @Override

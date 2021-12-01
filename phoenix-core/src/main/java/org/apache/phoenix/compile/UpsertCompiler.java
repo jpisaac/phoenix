@@ -44,8 +44,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -181,9 +180,10 @@ public class UpsertCompiler {
                 columnValues.put(column, value);
                 columnValueSize += (column.getEstimatedSize() + value.length);
                 if (column.getDataType() == PJsonDC.INSTANCE) {
+                    System.out.println("GOKCEN addDynamicColumnsForTopJson for " + table.getName().getString() + " " + column.getDataType().toString());
                     columnValueSize += addDynamicColumnsForTopJson(columnValues, table, value, column, positionToAddDynCols);
                 } else {
-                    if (table.getName().getString().toUpperCase().contains("_DC") && column.getName().getString().toUpperCase().contains("JSON")) {
+                    if (column.getName().getString().toUpperCase().contains("JSON")) {
                        LOGGER.info("GOKCEN column type for " + table.getName().getString() + " " + column.getDataType().toString());
                     }
                 }
@@ -446,8 +446,6 @@ public class UpsertCompiler {
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
         boolean useServerTimestampToBe = false;
 
-        LOGGER.info("GOKCEN upsert:" + upsert.toString() + " " + columnNodes.toString() + " values:" + valueNodes.toString());
-
         resolver = FromCompiler.getResolverForMutation(upsert, connection);
         tableRefToBe = resolver.getTables().get(0);
         table = tableRefToBe.getTable();
@@ -635,7 +633,7 @@ public class UpsertCompiler {
         }
         SelectStatement selectForEvaluation = null;
         if (isFunctionEvalNeeded) {
-            selectForEvaluation = SelectStatement.create(SelectStatement.SELECT_ONE, tableNode, nodesForFunctions);
+            selectForEvaluation = SelectStatement.create(SelectStatement.SELECT_STAR, tableNode, nodesForFunctions);
             selectForEvaluation.combine((new ParseNodeFactory().and(whereNodes)));
         }
         if (valueNodes == null || isFunctionEvalNeeded) {
@@ -755,8 +753,7 @@ public class UpsertCompiler {
         if (valueNodes == null || isFunctionEvalNeeded) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
-            //runOnServer = true;
-            isFunctionEvalNeeded = false;
+            runOnServer = true;
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;
@@ -873,6 +870,27 @@ public class UpsertCompiler {
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
                     // Ignore order by - it has no impact
                     final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, originalQueryPlan);
+                    if (isFunctionEvalNeeded) {
+                        List<Expression> constantExpressions = Lists.newArrayListWithExpectedSize(valueNodes.size());
+                        UpsertValuesCompiler expressionBuilder = new UpsertValuesCompiler(context);
+                        int nodeIndex = 0;
+                        for (ParseNode valueNode : valueNodes) {
+                            if (!valueNode.isStateless()) {
+                                //   throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
+                            }
+                            PColumn column = allColumns.get(columnIndexes[nodeIndex]);
+                            expressionBuilder.setColumn(column);
+                            Expression expression = valueNode.accept(expressionBuilder);
+                            if (expression.getDataType() != null && !expression.getDataType().isCastableTo(column.getDataType())) {
+                                throw TypeMismatchException.newException(
+                                        expression.getDataType(), column.getDataType(), "expression: "
+                                                + expression.toString() + " in column " + column);
+                            }
+                            constantExpressions.add(expression);
+                            nodeIndex++;
+                        }
+                        scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(constantExpressions));
+                                       }
                     return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context, connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
                 }
             }
@@ -999,7 +1017,6 @@ public class UpsertCompiler {
             }
         }
         final byte[] onDupKeyBytes = onDupKeyBytesToBe;
-        
         return new UpsertValuesMutationPlan(context, tableRef, nodeIndexOffset, constantExpressions,
                 allColumns, columnIndexes, overlapViewColumns, values, addViewColumns,
                 connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, maxSize, maxSizeBytes);

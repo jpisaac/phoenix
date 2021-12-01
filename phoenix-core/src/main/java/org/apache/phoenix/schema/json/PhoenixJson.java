@@ -23,6 +23,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Reader;
+import java.io.StringReader;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.stream.JsonReader;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -279,7 +282,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
             ObjectInputStream in = new ObjectInputStream(byteIn);
             return (Map<String, Object>) in.readObject();
         } catch (Exception e) {
-            System.out.println("GOKCEN fromBytes " + e.getStackTrace() );
+            System.out.println("GOKCEN fromBytes exception " + Bytes.toString(bytes) );
             LOGGER.error("fromBytes",e);
         }
         return null;

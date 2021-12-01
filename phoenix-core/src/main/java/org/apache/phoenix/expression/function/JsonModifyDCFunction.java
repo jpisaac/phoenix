@@ -18,11 +18,14 @@
 package org.apache.phoenix.expression.function;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.JsonElement;
 import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.JsonValueDCParseNode;
@@ -50,6 +53,9 @@ public class JsonModifyDCFunction extends ScalarFunction {
     public static final String NAME = "JSON_MODIFY_DC";
     private String jsonPath;
     private String newValue;
+    private boolean topLevel;
+    private String dynColumnName;
+    private byte[] dynColumnValue;
 
     // This is called from ExpressionType newInstance
     public JsonModifyDCFunction() {
@@ -61,6 +67,7 @@ public class JsonModifyDCFunction extends ScalarFunction {
         Preconditions.checkNotNull(jsonPath);
         this.jsonPath = jsonPath;
         this.newValue = newValue;
+        this.topLevel = false;
     }
 
     @Override
@@ -98,23 +105,55 @@ public class JsonModifyDCFunction extends ScalarFunction {
             return true;
         }
 
-        //String dynColName = jsonPathExprStr.substring(jsonPathExprStr.indexOf("$."));
-        //if (dynColName.contains(".") || dynColName.contains("*") || dynColName.contains("[")) {
+        if (!getNewValueExpr().evaluate(tuple, ptr)) {
+            return false;
+        }
+
+        String newVal = (String)PVarchar.INSTANCE.toObject(ptr,
+                getNewValueExpr().getSortOrder());
+
             // TODO: support reading with type
             //String jsonFieldString = JsonPath.read(colValue, jsonPathExprStr);
-            String jsonFieldString = setJsonStringForPath(colValue, jsonPathExprStr, newValue);
-            ptr.set(PVarchar.INSTANCE.toBytes(jsonFieldString));
-//            return true;
-//        }
+        String jsonFieldString = setJsonStringForPath(colValue, jsonPathExprStr, newVal);
+        ptr.set(PVarchar.INSTANCE.toBytes(jsonFieldString));
+
         return true;
     }
-    public static String setJsonStringForPath(String strJson, String strJPath, String newValue) {
+
+    public boolean isTopLevel() {
+        return topLevel;
+    }
+
+    public String getColumnName(){
+        return dynColumnName.toUpperCase();
+    }
+
+    public byte[] getDynColumnValue() {
+        return dynColumnValue;
+    }
+
+    private String setJsonStringForPath(String strJson, String strJPath, String newValue) {
         Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).mappingProvider(new GsonMappingProvider()).build();
-        String result = JsonPath.using(conf).parse(strJson).set(strJPath, newValue).json().toString();
+        DocumentContext documentContext = JsonPath.using(conf).parse(strJson);
+        JsonElement newJsonElem = JsonPath.using(conf).parse(newValue).json();
+
+        JsonElement changedElem = JsonPath.using(conf).parse(strJPath).json();
+        dynColumnName = strJPath.substring(strJPath.indexOf("$.") + "$.".length());
+        if (newJsonElem.isJsonPrimitive() && !dynColumnName.contains(".")) {
+            topLevel = true;
+            dynColumnValue = Bytes.toBytes(newValue);
+        }
+
+        String result = documentContext.set(strJPath, newJsonElem).jsonString();
+
         if (result.startsWith("\"") && result.endsWith("\"")) {
             result = result.substring(1, result.length()-1);
         }
         return result;
+    }
+
+    private Expression getNewValueExpr() {
+        return getChildren().get(2);
     }
 
     private Expression getColValExpr() {

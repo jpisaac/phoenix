@@ -940,6 +940,85 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testSimpleJsonModifyDC() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol jsondc)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (1,2, '" + JsonDoc1 + "')");
+            SingleCellIndexIT.dumpTable(tableName);
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_DC(jsoncol, '$.info.address.town', 'Manchester')) ";
+            conn.createStatement().execute(upsert);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_DC(jsoncol, '$.info.tags', '[\"Sport\", \"Water polo\", \"Books\"]')) ");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_DC(jsoncol, '$.type', 'Advanced')) ");
+            SingleCellIndexIT.dumpTable(tableName);
+
+            String queryTemplate ="SELECT JSON_VALUE_DC(jsoncol, '$.type'), JSON_VALUE_DC(jsoncol, '$.info.address.town'), " +
+                    "JSON_VALUE_DC(jsoncol, '$.info.tags[1]'), JSON_VALUE_DC(jsoncol, '$.info.tags') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE_DC(jsoncol, '$.name') = '%s'";
+            String query = String.format(queryTemplate, "AndersenFamily");
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Advanced", rs.getString(1));
+            assertEquals("Manchester", rs.getString(2));
+            assertEquals("Water polo", rs.getString(3));
+            assertEquals("[\"Sport\",\"Water polo\",\"Books\"]", rs.getString(4));
+            assertFalse(rs.next());
+
+            // Now check for empty match
+            query = String.format(queryTemplate, "Windsors");
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSimpleJsonModifyBinary() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol jsonb)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setBytes(3, JsonDoc1.getBytes());
+            stmt.execute();
+            conn.commit();
+            SingleCellIndexIT.dumpTable(tableName);
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_B(jsoncol, '$.info.address.town', 'Manchester')) ";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            SingleCellIndexIT.dumpTable(tableName);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_B(jsoncol, '$.info.tags', '[\"Sport\", \"Water polo\", \"Books\"]')) ");
+
+            String queryTemplate ="SELECT JSON_VALUE_B(jsoncol, '$.type'), JSON_VALUE_B(jsoncol, '$.info.address.town'), " +
+                    "JSON_VALUE_B(jsoncol, '$.info.tags[1]'), JSON_VALUE_B(jsoncol, '$.info.tags'), JSON_VALUE_B(jsoncol, '$.info') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE_B(jsoncol, '$.name') = '%s'";
+            String query = String.format(queryTemplate, "AndersenFamily");
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Basic", rs.getString(1));
+            assertEquals("Manchester", rs.getString(2));
+            assertEquals("Water polo", rs.getString(3));
+            assertEquals("[\"Sport\",\"Water polo\",\"Books\"]", rs.getString(4));
+            assertEquals("{\"type\":1,\"address\":{\"town\":\"Manchester\",\"county\":\"Avon\",\"country\":\"England\"},\"tags\":[\"Sport\",\"Water polo\",\"Books\"]}", rs.getString(5));
+            assertFalse(rs.next());
+
+            // Now check for empty match
+            query = String.format(queryTemplate, "Windsors");
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
+    }
 
     private void upsertScenario(PhoenixConnection conn, String scenario) throws SQLException {
         String tableName = "TBL_JSON_STRING";

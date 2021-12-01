@@ -36,7 +36,8 @@ public enum DataTypeMapping {
     TINYINT("TINYINT", Types.TINYINT),
     JSON("JSON", Types.VARCHAR),
     JSONDC("JSONDC", Types.VARCHAR),
-    JSONB("JSONB", Types.VARBINARY);
+    JSONB("JSONB", Types.VARBINARY),
+    BSON("BSON", Types.VARCHAR);
 
     private final String sType;
 

@@ -19,11 +19,14 @@ package org.apache.phoenix.expression.function;
 
 import com.github.wnameless.json.unflattener.JsonUnflattener;
 import com.google.common.base.Preconditions;
+import com.google.gson.JsonElement;
 import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.JsonValueBParseNode;
@@ -31,9 +34,11 @@ import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJsonB;
+import org.apache.phoenix.schema.types.PJsonDC;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -46,7 +51,7 @@ import java.util.Map;
  */
 @FunctionParseNode.BuiltInFunction(name = JsonModifyBFunction.NAME, nodeClass = JsonValueBParseNode.class,
         args = {
-                @FunctionParseNode.Argument(allowedTypes = { PJsonB.class, PVarbinary.class }),
+                @FunctionParseNode.Argument(allowedTypes = { PJsonB.class, PVarchar.class }),
                 @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) ,
                 @FunctionParseNode.Argument(allowedTypes = { PVarchar.class })})
 public class JsonModifyBFunction extends ScalarFunction {
@@ -103,26 +108,44 @@ public class JsonModifyBFunction extends ScalarFunction {
             return true;
         }
 
+        if (!getNewValueExpr().evaluate(tuple, ptr)) {
+            return false;
+        }
+
+        String newVal = (String)PVarchar.INSTANCE.toObject(ptr,
+                getNewValueExpr().getSortOrder());
+
         String plainPath = jsonPathExprStr.replace("$.", "");
         if (colValue.containsKey(plainPath)) {
-            colValue.put(plainPath, newValue);
+            colValue.put(plainPath, newVal);
             ptr.set(PhoenixJson.toBytes(colValue));
         } else {
             String unflattenedJson = JsonUnflattener.unflatten(colValue);
-            Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).mappingProvider(new GsonMappingProvider()).build();
-
-            String result = JsonPath.using(conf).parse(unflattenedJson).set(jsonPathExprStr, newValue).json().toString();
-            ptr.set(result.getBytes());
+            String result = updateJsonStringForPath(unflattenedJson, jsonPathExprStr, newVal);
+            try {
+                ptr.set(PhoenixJson.convertToFlattenMapBytes(result.getBytes()));
+            } catch (SQLException throwables) {
+                throwables.printStackTrace();
+            }
         }
 
         return true;
     }
 
-    public static String getJsonStringForPath(Map<String, Object> jsonMap, String strJPath) {
-        if (jsonMap.containsKey(strJPath)) {
-            return jsonMap.get(strJPath).toString();
+    private Expression getNewValueExpr() {
+        return getChildren().get(2);
+    }
+
+    public static String updateJsonStringForPath(String strJson, String strJPath, String newValue) {
+        Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).mappingProvider(new GsonMappingProvider()).build();
+        DocumentContext documentContext = JsonPath.using(conf).parse(strJson);
+        JsonElement newJsonElem = JsonPath.using(conf).parse(newValue).json();
+        String result = documentContext.set(strJPath, newJsonElem).jsonString();
+
+        if (result.startsWith("\"") && result.endsWith("\"")) {
+            result = result.substring(1, result.length()-1);
         }
-        return null;
+        return result;
     }
 
     private Expression getColValExpr() {
@@ -135,6 +158,6 @@ public class JsonModifyBFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PVarchar.INSTANCE;
+        return PJsonDC.INSTANCE;
     }
 }

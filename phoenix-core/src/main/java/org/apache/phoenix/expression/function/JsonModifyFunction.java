@@ -18,8 +18,14 @@
 package org.apache.phoenix.expression.function;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.Option;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -31,6 +37,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarchar;
 
+import javax.swing.text.Document;
 import java.util.List;
 
 /**
@@ -98,16 +105,25 @@ public class JsonModifyFunction extends ScalarFunction {
             return true;
         }
 
+        if (!getNewValueExpr().evaluate(tuple, ptr)) {
+            return false;
+        }
+
+        String newVal = (String)PVarchar.INSTANCE.toObject(ptr,
+                getNewValueExpr().getSortOrder());
         // TODO: support reading with type
         //String jsonFieldString = JsonPath.read(colValue, jsonPathExprStr);
-        String jsonFieldString = updateJsonStringForPath(colValue, jsonPathExprStr, newValue);
+        String jsonFieldString = updateJsonStringForPath(colValue, jsonPathExprStr, newVal);
         ptr.set(PVarchar.INSTANCE.toBytes(jsonFieldString));
         return true;
     }
+
     public static String updateJsonStringForPath(String strJson, String strJPath, String newValue) {
         Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).mappingProvider(new GsonMappingProvider()).build();
+        DocumentContext documentContext = JsonPath.using(conf).parse(strJson);
+        JsonElement newJsonElem = JsonPath.using(conf).parse(newValue).json();
+        String result = documentContext.set(strJPath, newJsonElem).jsonString();
 
-        String result = JsonPath.using(conf).parse(strJson).set(strJPath, newValue).json().toString();
         if (result.startsWith("\"") && result.endsWith("\"")) {
             result = result.substring(1, result.length()-1);
         }
@@ -120,6 +136,10 @@ public class JsonModifyFunction extends ScalarFunction {
 
     private Expression getJSONPathExpr() {
         return getChildren().get(1);
+    }
+
+    private Expression getNewValueExpr() {
+        return getChildren().get(2);
     }
 
     @Override

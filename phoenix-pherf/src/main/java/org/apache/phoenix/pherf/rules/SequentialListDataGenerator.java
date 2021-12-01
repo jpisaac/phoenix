@@ -59,6 +59,7 @@ public class SequentialListDataGenerator implements RuleBasedDataGenerator {
         case VARBINARY:
         case JSON:
         case JSONB:
+        case BSON:
         case JSONDC:
         case CHAR:
             return true;

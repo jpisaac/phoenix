@@ -69,6 +69,7 @@ public class SequentialVarcharDataGenerator implements RuleBasedDataGenerator {
         case JSON:
         case JSONB:
         case JSONDC:
+        case BSON:
         case CHAR:
             return true;
         default:

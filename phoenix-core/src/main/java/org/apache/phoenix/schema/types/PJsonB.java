@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.schema.types;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.json.PhoenixJson;
@@ -75,6 +76,30 @@ public class PJsonB extends PVarbinary{
     }
 
     @Override
+    public byte[] toBytes(Object object, SortOrder sortOrder) {
+        if (object == null) {
+            return ByteUtil.EMPTY_BYTE_ARRAY;
+        }
+
+        try {
+            if (object instanceof Map) {
+                return PhoenixJson.toBytes((Map)object);
+            } else {
+                if (object instanceof String) {
+                   // return toBytes(object);
+                    //return PhoenixJson.toBytes(PhoenixJson.fromBytes(Bytes.toBytes((String) object)));
+                    //return Bytes.toBytes((String) object);
+                    return PhoenixJson.toBytes(PhoenixJson.fromBytes(Bytes.toBytes((String) object)));
+                    //return PhoenixJson.convertToFlattenMapBytes(Bytes.toBytes((String) object));
+                }
+                return PhoenixJson.convertToFlattenMapBytes((byte[]) object);
+            }
+        } catch (SQLException throwables) {
+            throw new IllegalDataException(throwables);
+        }
+    }
+
+    @Override
     public byte[] toBytes(Object object)  {
         if (object == null) {
             return ByteUtil.EMPTY_BYTE_ARRAY;
@@ -84,6 +109,9 @@ public class PJsonB extends PVarbinary{
             if (object instanceof Map) {
                 return PhoenixJson.toBytes((Map)object);
             } else {
+                if (object instanceof String) {
+                    object = Bytes.toBytes((String) object);
+                }
                 return PhoenixJson.convertToFlattenMapBytes((byte[]) object);
             }
         } catch (SQLException throwables) {

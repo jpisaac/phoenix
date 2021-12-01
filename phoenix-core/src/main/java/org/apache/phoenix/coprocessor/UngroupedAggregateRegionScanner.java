@@ -43,14 +43,19 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
@@ -72,6 +77,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.expression.function.JsonModifyDCFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -80,6 +86,9 @@ import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
@@ -97,6 +106,8 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PJsonDC;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -481,6 +492,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         }
         projectedTable.newKey(ptr, values);
         PRow row = projectedTable.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
+        int dynColCnt = projectedColumns.size();
         for (; i < projectedColumns.size(); i++) {
             Expression expression = selectExpressions.get(i - bucketNumOffset);
             if (expression.evaluate(result, ptr)) {
@@ -500,6 +512,14 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         column.getSortOrder(), projectedTable.rowKeyOrderOptimizable());
                 byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 row.setValue(column, bytes);
+                if (expression instanceof JsonModifyDCFunction) {
+                    JsonModifyDCFunction exp = (JsonModifyDCFunction) expression;
+                    if (exp.isTopLevel()) {
+                        PColumn dynCol = new PColumnImpl(PNameFactory.newName(exp.getColumnName()), column.getName(), PVarchar.INSTANCE,
+                                column.getMaxLength(), column.getScale(), true, dynColCnt++, column.getSortOrder(), 0, null, false, null, false, true, exp.getColumnName().getBytes(), HConstants.LATEST_TIMESTAMP);
+                        row.setValue(dynCol, exp.getDynColumnValue());
+                    }
+                }
             }
         }
         for (Mutation mutation : row.toRowMutations()) {
