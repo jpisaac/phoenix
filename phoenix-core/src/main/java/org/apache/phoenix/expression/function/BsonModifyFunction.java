@@ -20,21 +20,28 @@ package org.apache.phoenix.expression.function;
 import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.BsonValueParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.JsonValueBParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.bson.BsonArray;
+import org.bson.BsonBinaryReader;
 import org.bson.BsonDocument;
+import org.bson.BsonDocumentReader;
+import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
+import org.bson.codecs.BsonDocumentCodec;
+import org.bson.codecs.DecoderContext;
+import org.bson.codecs.RawBsonDocumentCodec;
+import org.bson.io.ByteBufferBsonInput;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,25 +53,24 @@ import java.util.regex.Pattern;
  * The optional returning clause performs a typecast. Without a returning clause, JSON_VALUE returns a string.
  *
  */
-@FunctionParseNode.BuiltInFunction(name = BsonValueFunction.NAME, nodeClass = BsonValueParseNode.class,
+@FunctionParseNode.BuiltInFunction(name = BsonModifyFunction.NAME, nodeClass = BsonValueParseNode.class,
         args = {
-                @FunctionParseNode.Argument(allowedTypes = { PBson.class, PVarbinary.class}),
-                @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
-public class BsonValueFunction extends ScalarFunction {
+                @FunctionParseNode.Argument(allowedTypes = { PBson.class, PVarchar.class }),
+                @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) ,
+                @FunctionParseNode.Argument(allowedTypes = { PVarchar.class })})
+public class BsonModifyFunction extends ScalarFunction {
 
-    public static final String NAME = "BSON_VALUE";
+    public static final String NAME = "BSON_MODIFY";
     private static final String ARRAY_SUBSCRIPT_PATTERN = "(.*)\\[(\\d+)\\]";
-    private String jsonPath;
 
     // This is called from ExpressionType newInstance
-    public BsonValueFunction() {
+    public BsonModifyFunction() {
 
     }
 
-    public BsonValueFunction(List<Expression> children, String jsonPath) {
+    public BsonModifyFunction(List<Expression> children, String jsonPath, String newValue) {
         super(children);
         Preconditions.checkNotNull(jsonPath);
-        this.jsonPath = jsonPath;
     }
 
     @Override
@@ -93,29 +99,34 @@ public class BsonValueFunction extends ScalarFunction {
         }
 
         String jsonPathExprStr = (String) PVarchar.INSTANCE.toObject(ptr,
-                getJSONPathExpr().getSortOrder());
+            getJSONPathExpr().getSortOrder());
         if (jsonPathExprStr == null) {
             return true;
         }
 
+        if (!getNewValueExpr().evaluate(tuple, ptr)) {
+            return false;
+        }
+
+        String newVal = (String)PVarchar.INSTANCE.toObject(ptr,
+            getNewValueExpr().getSortOrder());
+
         Configuration conf = Configuration
             .builder()
             .jsonProvider(new BsonJsonProvider())
-            //.mappingProvider(new BsonMappingProvider())
             .build();
-        BsonValue value = JsonPath.using(conf).parse(top).read(jsonPathExprStr, BsonValue.class);
-        String jsonFieldString = null;
-        if (value != null) {
-            if (value.isString()) {
-                jsonFieldString = value.asString().getValue();
-            } else {
-                jsonFieldString = value.toString();
-            }
-        }
-
-        ptr.set(PVarchar.INSTANCE.toBytes(jsonFieldString));
-
+        BsonValue newValue = JsonPath.using(conf).parse(newVal).json();
+        BsonDocument root = fromRaw(top);
+        JsonPath.using(conf).parse(root).set(jsonPathExprStr, newValue);
+        RawBsonDocument updated =
+            new RawBsonDocumentCodec().decode(new BsonDocumentReader(root), DecoderContext.builder().build());
+        ByteBuffer buffer = updated.getByteBuffer().asNIO();
+        ptr.set(buffer.array(), buffer.arrayOffset(), buffer.limit());
         return true;
+    }
+
+    private Expression getNewValueExpr() {
+        return getChildren().get(2);
     }
 
     private Expression getColValExpr() {
@@ -126,8 +137,18 @@ public class BsonValueFunction extends ScalarFunction {
         return getChildren().get(1);
     }
 
+    private BsonDocument fromRaw(RawBsonDocument rawDocument) {
+        // Transform to an in memory BsonDocument instance
+        BsonBinaryReader bsonReader = new BsonBinaryReader(new ByteBufferBsonInput(rawDocument.getByteBuffer()));
+        try {
+            return new BsonDocumentCodec().decode(bsonReader, DecoderContext.builder().build());
+        } finally {
+            bsonReader.close();
+        }
+    }
+
     @Override
     public PDataType getDataType() {
-        return PVarchar.INSTANCE;
+        return PBson.INSTANCE;
     }
 }

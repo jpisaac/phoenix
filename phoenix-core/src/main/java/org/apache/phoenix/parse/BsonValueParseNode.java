@@ -20,6 +20,7 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.function.BsonModifyFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.schema.types.PBson;
@@ -41,6 +42,10 @@ public class BsonValueParseNode extends FunctionParseNode {
         if (!dataType.isCoercibleTo(PBson.INSTANCE)) {
             throw new SQLException(dataType + " type is unsupported for BSON_VALUE().");
         }
-        return new BsonValueFunction(children, jsonPath);
+        if (getName().equalsIgnoreCase(BsonModifyFunction.NAME)) {
+            return new BsonModifyFunction(children, jsonPath, (String) ((LiteralExpression) children.get(2)).getValue());
+        } else {
+            return new BsonValueFunction(children, jsonPath);
+        }
     }
 }

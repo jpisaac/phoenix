@@ -61,6 +61,20 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             "    \"name\":\"AndersenFamily\"  \n" +
             " }";
 
+    private String JsonDoc4 = "{  \n" +
+        "     \"info\":{    \n" +
+        "       \"type\":1,  \n" +
+        "       \"address\":{    \n" +
+        "         \"town\":\"Manchester\",  \n" +
+        "         \"county\":\"Avon\",  \n" +
+        "         \"country\":\"England\"  \n" +
+        "       },  \n" +
+        "       \"tags\":[\"Sport\", \"Water polo\"]  \n" +
+        "    },  \n" +
+        "    \"type\":\"Basic\",  \n" +
+        "    \"name\":\"AndersenFamily\"  \n" +
+        " }";
+
     private String JsonDoc2="{\n" +
             "   \"testCnt\": \"SomeCnt1\",                    \n" +
             "   \"test\": \"test1\",\n" +
@@ -1132,7 +1146,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             stmt.setString(3, JsonDoc1);
             stmt.execute();
             conn.commit();
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            //TestUtil.dumpTable(conn, TableName.valueOf(tableName));
 
             String queryTemplate ="SELECT BSON_VALUE(jsoncol, '$.type'), BSON_VALUE(jsoncol, '$.info.address.town'), " +
                 "BSON_VALUE(jsoncol, '$.info.tags[1]'), BSON_VALUE(jsoncol, '$.info.tags'), BSON_VALUE(jsoncol, '$.info') " +
@@ -1153,6 +1167,72 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             query = String.format(queryTemplate, "Windsors");
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSimpleBsonModify() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol bson)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, JsonDoc1);
+            stmt.execute();
+            conn.commit();
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, BSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
+            conn.createStatement().execute(upsert);
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, BSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, BSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+
+            String queryTemplate ="SELECT BSON_VALUE(jsoncol, '$.type'), BSON_VALUE(jsoncol, '$.info.address.town'), " +
+                "BSON_VALUE(jsoncol, '$.info.tags[1]'), BSON_VALUE(jsoncol, '$.info.tags'), BSON_VALUE(jsoncol, '$.info') " +
+                " FROM " + tableName +
+                " WHERE BSON_VALUE(jsoncol, '$.name') = '%s'";
+            String query = String.format(queryTemplate, "AndersenFamily");
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Basic", rs.getString(1));
+            assertEquals("Manchester", rs.getString(2));
+            assertEquals("alto1", rs.getString(3));
+            //assertEquals("[\"Sport\",\"Water polo\",\"Books\"]", rs.getString(4));
+            //assertEquals("{\"type\":1,\"address\":{\"town\":\"Manchester\",\"county\":\"Avon\",\"country\":\"England\"},\"tags\":[\"Sport\",\"Water polo\",\"Books\"]}", rs.getString(5));
+            //assertFalse(rs.next());
+
+            // Now check for empty match
+            query = String.format(queryTemplate, "Windsors");
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSimpleBsonQuery2() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            //String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.v varchar)";
+            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol bson)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, JsonDoc2);
+            stmt.execute();
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT BSON_VALUE(JSONCOL,'$.test'), BSON_VALUE(JSONCOL, '$.testCnt'), BSON_VALUE(JSONCOL, '$.infoTop[5].info.address.state'),BSON_VALUE(JSONCOL, '$.infoTop[4].tags[1]')  FROM "
+                + tableName + " WHERE BSON_VALUE(JSONCOL, '$.test')='test1'");
+            assertTrue(rs.next());
+            assertEquals("test1", rs.getString(1));
+            assertEquals("SomeCnt1", rs.getString(2));
         }
     }
 
