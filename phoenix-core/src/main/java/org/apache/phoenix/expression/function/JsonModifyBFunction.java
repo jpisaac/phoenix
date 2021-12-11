@@ -158,6 +158,6 @@ public class JsonModifyBFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PJsonDC.INSTANCE;
+        return PJsonB.INSTANCE;
     }
 }

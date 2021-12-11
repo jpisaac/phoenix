@@ -21,6 +21,8 @@ import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
+import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
+import com.jayway.jsonpath.spi.mapper.JsonSmartMappingProvider;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.BsonValueParseNode;
@@ -101,6 +103,7 @@ public class BsonValueFunction extends ScalarFunction {
         Configuration conf = Configuration
             .builder()
             .jsonProvider(new BsonJsonProvider())
+                .mappingProvider(new JsonSmartMappingProvider())
             //.mappingProvider(new BsonMappingProvider())
             .build();
         BsonValue value = JsonPath.using(conf).parse(top).read(jsonPathExprStr, BsonValue.class);

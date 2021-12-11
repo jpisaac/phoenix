@@ -29,6 +29,7 @@ import java.util.BitSet;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -113,6 +114,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.UpsertColumnsValuesMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PJsonDC;
@@ -177,15 +179,14 @@ public class UpsertCompiler {
                     } 
                 }
             } else {
+//                if (table.getName().getString().toLowerCase().contains("bson")) {
+//                    LOGGER.info("GOKCEN value = " + Bytes.toString(value) + " tablename=" + table.getName() + " type=" + column.getDataType().toString());
+//                    System.out.println("GOKCEN value = " + Bytes.toString(value) + " tablename=" + table.getName() + " type=" + column.getDataType().toString());
+//                }
                 columnValues.put(column, value);
                 columnValueSize += (column.getEstimatedSize() + value.length);
                 if (column.getDataType() == PJsonDC.INSTANCE) {
-                    System.out.println("GOKCEN addDynamicColumnsForTopJson for " + table.getName().getString() + " " + column.getDataType().toString());
                     columnValueSize += addDynamicColumnsForTopJson(columnValues, table, value, column, positionToAddDynCols);
-                } else {
-                    if (column.getName().getString().toUpperCase().contains("JSON")) {
-                       LOGGER.info("GOKCEN column type for " + table.getName().getString() + " " + column.getDataType().toString());
-                    }
                 }
             }
         }

@@ -137,7 +137,6 @@ public class JsonModifyDCFunction extends ScalarFunction {
         DocumentContext documentContext = JsonPath.using(conf).parse(strJson);
         JsonElement newJsonElem = JsonPath.using(conf).parse(newValue).json();
 
-        JsonElement changedElem = JsonPath.using(conf).parse(strJPath).json();
         dynColumnName = strJPath.substring(strJPath.indexOf("$.") + "$.".length());
         if (newJsonElem.isJsonPrimitive() && !dynColumnName.contains(".")) {
             topLevel = true;

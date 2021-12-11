@@ -2,27 +2,44 @@ package org.apache.phoenix.expression.function;
 
 import com.jayway.jsonpath.InvalidJsonException;
 import com.jayway.jsonpath.spi.json.AbstractJsonProvider;
+import org.apache.phoenix.transaction.OmidTransactionContext;
+import org.bson.AbstractBsonReader;
+import org.bson.BSONException;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
+import org.bson.BsonBinaryReader;
 import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonDouble;
 import org.bson.BsonInt32;
 import org.bson.BsonInt64;
 import org.bson.BsonObjectId;
+import org.bson.BsonSerializationException;
 import org.bson.BsonString;
 import org.bson.BsonType;
 import org.bson.BsonValue;
+import org.bson.ByteBuf;
+import org.bson.ByteBufNIO;
 import org.bson.Document;
+import org.bson.RawBsonDocument;
+import org.bson.io.ByteBufferBsonInput;
 import org.bson.json.JsonReader;
 import org.bson.types.ObjectId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import static java.lang.String.format;
+import static org.bson.assertions.Assertions.notNull;
+
 public class BsonJsonProvider extends AbstractJsonProvider {
+    private static final Logger LOGGER = LoggerFactory.getLogger(BsonJsonProvider.class);
 
     @Override
     public Object parse(final String json) throws InvalidJsonException {
@@ -95,6 +112,7 @@ public class BsonJsonProvider extends AbstractJsonProvider {
     public Object getMapValue(final Object obj, final String key) {
         BsonDocument bsonDocument = toBsonDocument(obj);
         Object o = bsonDocument.get(key);
+
         /*if (!jsonObject.has(key)) {
             return UNDEFINED;
         } else {

@@ -347,8 +347,8 @@ public class WriteWorkload implements Workload {
                         try {
                             connection.commit();
                             duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-                            LOGGER.info("Writer ( " + Thread.currentThread().getName()
-                                    + ") committed Final Batch. Duration (" + duration + ") Ms");
+                            LOGGER.info("Writer committed Final Batch " + tableName
+                                    + " Duration " + duration + " Ms");
                             connection.close();
                         } catch (SQLException e) {
                             // Swallow since we are closing anyway

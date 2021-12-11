@@ -60,7 +60,6 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             "    \"type\":\"Basic\",  \n" +
             "    \"name\":\"AndersenFamily\"  \n" +
             " }";
-
     private String JsonDoc4 = "{  \n" +
         "     \"info\":{    \n" +
         "       \"type\":1,  \n" +
@@ -992,6 +991,87 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testSimpleJsonModifyDC2() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol jsondc)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, JsonDoc2);
+            stmt.execute();
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_DC(JSONCOL, '$.infoTop[1].favoriteFruit', 'apple'))";
+            conn.createStatement().execute(upsert);
+            SingleCellIndexIT.dumpTable(tableName);
+
+            String query ="SELECT JSON_VALUE_DC(JSONCOL, '$.infoTop[1].favoriteFruit') " +
+                    " FROM " + tableName ;
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("apple", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSimpleJsonModify2() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol json)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, JsonDoc2);
+            stmt.execute();
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(JSONCOL, '$.infoTop[1].favoriteFruit', 'apple'))";
+            conn.createStatement().execute(upsert);
+            SingleCellIndexIT.dumpTable(tableName);
+
+            String query ="SELECT JSON_VALUE(JSONCOL, '$.infoTop[1].favoriteFruit') " +
+                    " FROM " + tableName ;
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("apple", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSimpleJsonModifyBinary2() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol jsonb)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setBytes(3, JsonDoc2.getBytes());
+            stmt.execute();
+
+            String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY_B(JSONCOL, '$.infoTop[1].favoriteFruit', 'apple'))";
+            conn.createStatement().execute(upsert);
+            SingleCellIndexIT.dumpTable(tableName);
+
+            String query ="SELECT JSON_VALUE_B(JSONCOL, '$.infoTop[1].favoriteFruit') " +
+                    " FROM " + tableName ;
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("apple", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testSimpleJsonModifyBinary() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
@@ -1136,7 +1216,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
     @Test
     public void testSimpleBsonQuery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String tableName = generateUniqueName();
+        String tableName = generateUniqueName() + "bson";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol bson)";
             conn.createStatement().execute(ddl);
@@ -1147,7 +1227,6 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
             //TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-
             String queryTemplate ="SELECT BSON_VALUE(jsoncol, '$.type'), BSON_VALUE(jsoncol, '$.info.address.town'), " +
                 "BSON_VALUE(jsoncol, '$.info.tags[1]'), BSON_VALUE(jsoncol, '$.info.tags'), BSON_VALUE(jsoncol, '$.info') " +
                 " FROM " + tableName +
@@ -1167,6 +1246,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             query = String.format(queryTemplate, "Windsors");
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
+            fail();
         }
     }
 
@@ -1220,7 +1300,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             //String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.v varchar)";
-            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol bson)";
+            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol bson) IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0";
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
             stmt.setInt(1, 1);
@@ -1228,11 +1308,14 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             stmt.setString(3, JsonDoc2);
             stmt.execute();
             conn.commit();
+            SingleCellIndexIT.dumpTable(tableName);
+            SingleCellIndexIT.dumpTable("SYSTEM.CATALOG");
             ResultSet rs = conn.createStatement().executeQuery("SELECT BSON_VALUE(JSONCOL,'$.test'), BSON_VALUE(JSONCOL, '$.testCnt'), BSON_VALUE(JSONCOL, '$.infoTop[5].info.address.state'),BSON_VALUE(JSONCOL, '$.infoTop[4].tags[1]')  FROM "
                 + tableName + " WHERE BSON_VALUE(JSONCOL, '$.test')='test1'");
             assertTrue(rs.next());
             assertEquals("test1", rs.getString(1));
             assertEquals("SomeCnt1", rs.getString(2));
+            fail();
         }
     }
 

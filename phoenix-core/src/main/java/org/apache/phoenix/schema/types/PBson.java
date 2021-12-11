@@ -26,6 +26,7 @@ import org.apache.phoenix.util.StringUtil;
 import java.sql.Types;
 import java.text.Format;
 
+import org.bson.BsonType;
 import org.bson.RawBsonDocument;
 
 /**
@@ -67,7 +68,9 @@ public class PBson extends PVarbinary{
             return 0;
         }
         byte[] b = toBytes(object);
+      //  byte[] out = new byte[b.length+1];
         System.arraycopy(b, 0, bytes, offset, b.length);
+        //out[out.length-1] = BsonType.END_OF_DOCUMENT.getValue();
         return b.length;
 
     }
