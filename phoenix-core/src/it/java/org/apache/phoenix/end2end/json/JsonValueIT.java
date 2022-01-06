@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end.json;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -950,6 +951,46 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             rsD.next();
             assertEquals("JSONDC", rsD.getString("TYPE_NAME"));
             fail();
+        }
+    }
+
+    @Test
+    public void testExpressionIndex() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol json)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (1,2, '" + JsonDoc1+ "')");
+
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName+ " (JSON_VALUE(JSONCOL,'$.test') include (col1)");
+            SingleCellIndexIT.dumpTable(indexName);
+            SingleCellIndexIT.dumpTable("SYSTEM.CATALOG");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testExpressionIndex1() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 INTEGER PRIMARY KEY, k2 integer, k3 varchar)");
+
+            conn.createStatement().execute("UPSERT into " + tableName +" VALUES (1, 10, 'ten')");
+            conn.createStatement().execute("UPSERT into " + tableName +" VALUES (2, 4, 'four')");
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName+ " (k2*2) include (k3)");
+            SingleCellIndexIT.dumpTable(indexName);
+            SingleCellIndexIT.dumpTable("SYSTEM.CATALOG");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
         }
     }
 
