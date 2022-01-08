@@ -98,6 +98,11 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
         "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
 
+    public static final String JSON_VALUE_FUNCTION="_JsonValueFunction";
+    public static final String JSON_VALUE_B_FUNCTION="_JsonValueBFunction";
+    public static final String JSON_VALUE_DC_FUNCTION="_JsonValueDCFunction";
+    public static final String JSON_VALUE_BSON_FUNCTION="_JsonValueBsonFunction";
+
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
     * Needed for backward compatibility purposes. TODO: get rid of this in next major release.
@@ -403,7 +408,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
         RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment());
 
-        return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
+        return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null,
+                offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 

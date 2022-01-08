@@ -21,6 +21,7 @@ package org.apache.phoenix.iterate;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
@@ -60,7 +61,6 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -101,8 +101,8 @@ public abstract class RegionScannerFactory {
    * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
    * for 30 seconds. Unfortunately, until HBASE-7481 gets fixed, there's no way to do
    * the same from a custom filter.
-   * @param arrayKVRefs
-   * @param arrayFuncRefs
+   * @param serverParsedKVRefs
+   * @param serverParsedFuncRefs
    * @param offset starting position in the rowkey.
    * @param scan
    * @param tupleProjector
@@ -112,8 +112,9 @@ public abstract class RegionScannerFactory {
    * @param viewConstants
    */
   public RegionScanner getWrappedScanner(final RegionCoprocessorEnvironment env,
-      final RegionScanner s, final Set<KeyValueColumnExpression> arrayKVRefs,
-      final Expression[] arrayFuncRefs, final int offset, final Scan scan,
+      final RegionScanner s, final Set<KeyValueColumnExpression> serverParsedKVRefs,
+      final Expression[] serverParsedFuncRefs,
+                                         final int offset, final Scan scan,
       final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
       final Region dataRegion, final IndexMaintainer indexMaintainer,
       PhoenixTransactionContext tx,
@@ -189,13 +190,14 @@ public abstract class RegionScannerFactory {
           if (result.size() == 0) {
             return next;
           }
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+          if (serverParsedFuncRefs != null && serverParsedFuncRefs.length > 0 && serverParsedKVRefs.size() > 0) {
+            int arrayElementCellPosition = replaceServerParsedExpressionElement(serverParsedKVRefs, serverParsedFuncRefs, result);
             arrayElementCell = result.get(arrayElementCellPosition);
           }
+
           if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
             if(actualStartKey!=null) {
-              next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
+              next = scanTillScanStartRow(s, serverParsedKVRefs, serverParsedFuncRefs, result,
                   null, arrayElementCell);
               if (result.isEmpty() || isDummy(result)) {
                 return next;
@@ -327,7 +329,7 @@ public abstract class RegionScannerFactory {
             return true;
           }
           if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+            int arrayElementCellPosition = replaceServerParsedExpressionElement(arrayKVRefs, arrayFuncRefs, result);
             arrayElementCell = result.get(arrayElementCellPosition);
           }
           firstCell = result.get(0);
@@ -335,15 +337,15 @@ public abstract class RegionScannerFactory {
         return next;
       }
 
-      private int replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
-          final Expression[] arrayFuncRefs, List<Cell> result) {
+      private int replaceServerParsedExpressionElement(final Set<KeyValueColumnExpression> serverParsedKVRefs,
+                                                       final Expression[] serverParsedFuncRefs, List<Cell> result) {
         // make a copy of the results array here, as we're modifying it below
         MultiKeyValueTuple tuple = new MultiKeyValueTuple(ImmutableList.copyOf(result));
         // The size of both the arrays would be same?
         // Using KeyValueSchema to set and retrieve the value
         // collect the first kv to get the row
         Cell rowKv = result.get(0);
-        for (KeyValueColumnExpression kvExp : arrayKVRefs) {
+        for (KeyValueColumnExpression kvExp : serverParsedKVRefs) {
           if (kvExp.evaluate(tuple, ptr)) {
             ListIterator<Cell> itr = result.listIterator();
             while (itr.hasNext()) {
@@ -359,7 +361,7 @@ public abstract class RegionScannerFactory {
             }
           }
         }
-        byte[] value = kvSchema.toBytes(tuple, arrayFuncRefs,
+        byte[] value = kvSchema.toBytes(tuple, serverParsedFuncRefs,
             kvSchemaBitSet, ptr);
         // Add a dummy kv with the exact value of the array index
         result.add(new KeyValue(rowKv.getRowArray(), rowKv.getRowOffset(), rowKv.getRowLength(),

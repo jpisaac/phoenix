@@ -47,7 +47,10 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.JsonValueBFunction;
 import org.apache.phoenix.expression.function.JsonValueDCFunction;
+import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ProjectedColumnExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ReplaceArrayFunctionExpressionVisitor;
@@ -87,6 +90,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -358,15 +362,15 @@ public class ProjectionCompiler {
     public static RowProjector compile(StatementContext context, SelectStatement statement,
             GroupBy groupBy, List<? extends PDatum> targetColumns, Expression where,
             boolean wildcardIncludesDynamicCols) throws SQLException {
-        List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<>();
-        List<ProjectedColumnExpression> arrayProjectedColumnRefs = new ArrayList<>();
-        List<Expression> arrayKVFuncs = new ArrayList<>();
-        List<Expression> arrayOldFuncs = new ArrayList<>();
-        Map<Expression, Integer> arrayExpressionCounts = new HashMap<>();
+        List<KeyValueColumnExpression> serverParsedKVRefs = new ArrayList<>();
+        List<ProjectedColumnExpression> serverParsedProjectedColumnRefs = new ArrayList<>();
+        List<Expression> serverParsedKVFuncs = new ArrayList<>();
+        List<Expression> serverParsedOldFuncs = new ArrayList<>();
+        Map<Expression, Integer> serverParsedExpressionCounts = new HashMap<>();
         List<AliasedNode> aliasedNodes = statement.getSelect();
         // Setup projected columns in Scan
-        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs,
-                arrayKVFuncs, arrayExpressionCounts, arrayProjectedColumnRefs, arrayOldFuncs,
+        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, serverParsedKVRefs,
+                serverParsedKVFuncs, serverParsedExpressionCounts, serverParsedProjectedColumnRefs, serverParsedOldFuncs,
                 statement);
         List<ExpressionProjector> projectedColumns = new ArrayList<>();
         ColumnResolver resolver = context.getResolver();
@@ -450,34 +454,53 @@ public class ProjectionCompiler {
             index++;
         }
 
-        for (int i = arrayProjectedColumnRefs.size() - 1; i >= 0; i--) {
-            Expression expression = arrayProjectedColumnRefs.get(i);
-            Integer count = arrayExpressionCounts.get(expression);
+        for (int i = serverParsedProjectedColumnRefs.size() - 1; i >= 0; i--) {
+            Expression expression = serverParsedProjectedColumnRefs.get(i);
+            Integer count = serverParsedExpressionCounts.get(expression);
             if (count != 0) {
-                arrayKVRefs.remove(i);
-                arrayKVFuncs.remove(i);
-                arrayOldFuncs.remove(i);
+                serverParsedKVRefs.remove(i);
+                serverParsedKVFuncs.remove(i);
+                serverParsedOldFuncs.remove(i);
             }
         }
 
-        if (arrayKVFuncs.size() > 0 && arrayKVRefs.size() > 0) {
-            serailizeArrayIndexInformationAndSetInScan(context, arrayKVFuncs, arrayKVRefs);
+        if (serverParsedKVFuncs.size() > 0 && serverParsedKVRefs.size() > 0) {
+            // TODO: HACK!! Fix this later
+            if (serverParsedKVFuncs.get(0).getDataType().isArrayType()) {
+                serailizeServerParsedExpressionInformationAndSetInScan(context, BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX,
+                        serverParsedKVFuncs, serverParsedKVRefs);
+            } else {
+                if (serverParsedKVFuncs.get(0) instanceof JsonValueFunction) {
+                    serailizeServerParsedExpressionInformationAndSetInScan(context, BaseScannerRegionObserver.JSON_VALUE_FUNCTION,
+                            serverParsedKVFuncs, serverParsedKVRefs);
+                } else if (serverParsedKVFuncs.get(0) instanceof JsonValueBFunction) {
+                    serailizeServerParsedExpressionInformationAndSetInScan(context, BaseScannerRegionObserver.JSON_VALUE_B_FUNCTION,
+                            serverParsedKVFuncs, serverParsedKVRefs);
+                } else if (serverParsedKVFuncs.get(0) instanceof JsonValueDCFunction) {
+                    serailizeServerParsedExpressionInformationAndSetInScan(context, BaseScannerRegionObserver.JSON_VALUE_DC_FUNCTION,
+                            serverParsedKVFuncs, serverParsedKVRefs);
+                } else if (serverParsedKVFuncs.get(0) instanceof BsonValueFunction) {
+                    serailizeServerParsedExpressionInformationAndSetInScan(context, BaseScannerRegionObserver.JSON_VALUE_BSON_FUNCTION,
+                            serverParsedKVFuncs, serverParsedKVRefs);
+                }
+            }
+            //End of HACK
             KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-            for (Expression expression : arrayKVRefs) {
+            for (Expression expression : serverParsedKVRefs) {
                 builder.addField(expression);
             }
             KeyValueSchema kvSchema = builder.build();
             ValueBitSet arrayIndexesBitSet = ValueBitSet.newInstance(kvSchema);
             builder = new KeyValueSchemaBuilder(0);
-            for (Expression expression : arrayKVFuncs) {
+            for (Expression expression : serverParsedKVFuncs) {
                 builder.addField(expression);
             }
             KeyValueSchema arrayIndexesSchema = builder.build();
 
             Map<Expression, Expression> replacementMap = new HashMap<>();
-            for(int i = 0; i < arrayOldFuncs.size(); i++){
-                Expression function =arrayKVFuncs.get(i);
-                replacementMap.put(arrayOldFuncs.get(i), new ArrayIndexExpression(i, function.getDataType(), arrayIndexesBitSet, arrayIndexesSchema));
+            for(int i = 0; i < serverParsedOldFuncs.size(); i++){
+                Expression function =serverParsedKVFuncs.get(i);
+                replacementMap.put(serverParsedOldFuncs.get(i), new ArrayIndexExpression(i, function.getDataType(), arrayIndexesBitSet, arrayIndexesSchema));
             }
 
             ReplaceArrayFunctionExpressionVisitor visitor = new ReplaceArrayFunctionExpressionVisitor(replacementMap);
@@ -584,19 +607,20 @@ public class ProjectionCompiler {
             return null;
         }
     }
-    private static void serailizeArrayIndexInformationAndSetInScan(StatementContext context, List<Expression> arrayKVFuncs,
-            List<KeyValueColumnExpression> arrayKVRefs) {
+    private static void serailizeServerParsedExpressionInformationAndSetInScan(StatementContext context, String serverParsedExpressionAttribute,
+                                                                               List<Expression> serverParsedKVFuncs,
+                                                                               List<KeyValueColumnExpression> serverParsedKVRefs) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
             // Write the arrayKVRef size followed by the keyvalues that needs to be of type arrayindex function
-            WritableUtils.writeVInt(output, arrayKVRefs.size());
-            for (Expression expression : arrayKVRefs) {
+            WritableUtils.writeVInt(output, serverParsedKVRefs.size());
+            for (Expression expression : serverParsedKVRefs) {
                     expression.write(output);
             }
             // then write the number of arrayindex functions followeed by the expression itself
-            WritableUtils.writeVInt(output, arrayKVFuncs.size());
-            for (Expression expression : arrayKVFuncs) {
+            WritableUtils.writeVInt(output, serverParsedKVFuncs.size());
+            for (Expression expression : serverParsedKVFuncs) {
                     expression.write(output);
             }
             
@@ -609,7 +633,7 @@ public class ProjectionCompiler {
                 throw new RuntimeException(e);
             }
         }
-        context.getScan().setAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
+        context.getScan().setAttribute(serverParsedExpressionAttribute, stream.toByteArray());
     }
 
     private static class SelectClauseVisitor extends ExpressionCompiler {
@@ -620,21 +644,21 @@ public class ProjectionCompiler {
          */
         private boolean isCaseSensitive;
         private int elementCount;
-        private List<KeyValueColumnExpression> arrayKVRefs;
-        private List<Expression> arrayKVFuncs;
-        private List<Expression> arrayOldFuncs;
-        private List<ProjectedColumnExpression> arrayProjectedColumnRefs;
-        private Map<Expression, Integer> arrayExpressionCounts;
+        private List<KeyValueColumnExpression> serverParsedKVRefs;
+        private List<Expression> serverParsedKVFuncs;
+        private List<Expression> serverParsedOldFuncs;
+        private List<ProjectedColumnExpression> serverParsedProjectedColumnRefs;
+        private Map<Expression, Integer> serverParsedExpressionCounts;
         private SelectStatement statement; 
         
-        private SelectClauseVisitor(StatementContext context, GroupBy groupBy, 
-                List<KeyValueColumnExpression> arrayKVRefs, List<Expression> arrayKVFuncs, Map<Expression, Integer> arrayExpressionCounts, List<ProjectedColumnExpression> arrayProjectedColumnRefs, List<Expression> arrayOldFuncs, SelectStatement statement) {
+        private SelectClauseVisitor(StatementContext context, GroupBy groupBy,
+                                    List<KeyValueColumnExpression> serverParsedKVRefs, List<Expression> serverParsedKVFuncs, Map<Expression, Integer> serverParsedExpressionCounts, List<ProjectedColumnExpression> serverParsedProjectedColumnRefs, List<Expression> arrayOldFuncs, SelectStatement statement) {
             super(context, groupBy);
-            this.arrayKVRefs = arrayKVRefs;
-            this.arrayKVFuncs = arrayKVFuncs;
-            this.arrayOldFuncs = arrayOldFuncs;
-            this.arrayExpressionCounts = arrayExpressionCounts;
-            this.arrayProjectedColumnRefs = arrayProjectedColumnRefs;
+            this.serverParsedKVRefs = serverParsedKVRefs;
+            this.serverParsedKVFuncs = serverParsedKVFuncs;
+            this.serverParsedOldFuncs = arrayOldFuncs;
+            this.serverParsedExpressionCounts = serverParsedExpressionCounts;
+            this.serverParsedProjectedColumnRefs = serverParsedProjectedColumnRefs;
             this.statement = statement;
             reset();
         }
@@ -656,9 +680,9 @@ public class ProjectionCompiler {
         @Override
         public Expression visit(ColumnParseNode node) throws SQLException {
             Expression expression = super.visit(node);
-            if (expression.getDataType().isArrayType()) {
-                Integer count = arrayExpressionCounts.get(expression);
-                arrayExpressionCounts.put(expression, count != null ? (count + 1) : 1);
+            if (expression.getDataType().isArrayType() || node.getName().toUpperCase().contains("JSON")) {
+                Integer count = serverParsedExpressionCounts.get(expression);
+                serverParsedExpressionCounts.put(expression, count != null ? (count + 1) : 1);
             }
             return expression;
         }
@@ -684,7 +708,8 @@ public class ProjectionCompiler {
         public Expression visitLeave(FunctionParseNode node, final List<Expression> children) throws SQLException {
 
             // this need not be done for group by clause with array. Hence the below check
-            if (!statement.isAggregate() && ArrayIndexFunction.NAME.equals(node.getName()) && children.get(0) instanceof ProjectedColumnExpression) {
+            if (!statement.isAggregate() && (ArrayIndexFunction.NAME.equals(node.getName())
+                    || node.getName().toUpperCase().contains("JSON")) && children.get(0) instanceof ProjectedColumnExpression) {
                  final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
                  final List<ProjectedColumnExpression> indexProjectedColumns = Lists.newArrayList();
                  final List<Expression> copyOfChildren = new ArrayList<>(children);
@@ -692,7 +717,7 @@ public class ProjectionCompiler {
                  children.get(0).accept(new ProjectedColumnExpressionVisitor() {
                      @Override
                      public Void visit(ProjectedColumnExpression expression) {
-                         if (expression.getDataType().isArrayType()) {
+                         //if (expression.getDataType().isArrayType()) {
                              indexProjectedColumns.add(expression);
                              PColumn col = expression.getColumn();
                              PTable table = context.getCurrentTable().getTable();
@@ -708,9 +733,9 @@ public class ProjectionCompiler {
                              }
                              indexKVs.add(keyValueColumnExpression);
                              copyOfChildren.set(0, keyValueColumnExpression);
-                             Integer count = arrayExpressionCounts.get(expression);
-                             arrayExpressionCounts.put(expression, count != null ? (count - 1) : -1);
-                         }
+                             Integer count = serverParsedExpressionCounts.get(expression);
+                             serverParsedExpressionCounts.put(expression, count != null ? (count - 1) : -1);
+                         //}
                          return null;
                      }
                  });
@@ -718,12 +743,12 @@ public class ProjectionCompiler {
                  Expression func = super.visitLeave(node,children);
                  // Add the keyvalues which is of type array
                  if (!indexKVs.isEmpty()) {
-                    arrayKVRefs.addAll(indexKVs);
-                    arrayProjectedColumnRefs.addAll(indexProjectedColumns);
+                    serverParsedKVRefs.addAll(indexKVs);
+                    serverParsedProjectedColumnRefs.addAll(indexProjectedColumns);
                     Expression funcModified = super.visitLeave(node, copyOfChildren);
                     // Track the array index function also
-                    arrayKVFuncs.add(funcModified);
-                    arrayOldFuncs.add(func);
+                    serverParsedKVFuncs.add(funcModified);
+                    serverParsedOldFuncs.add(func);
                 }
                 return func;
             } else {

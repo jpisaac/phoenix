@@ -230,6 +230,25 @@ public class TupleProjector {
         return new TupleProjector(dynColsSchema, expressions);
     }
 
+//    public static TupleProjector getJsonColumnsTupleProjector(List<Cell> result,
+//                                                                 List<PColumn> jsonCols, List<Cell> jsonColCells) throws InvalidProtocolBufferException {
+//        Set<Pair<ByteBuffer, ByteBuffer>> dynColCellQualifiers = new HashSet<>();
+//        populateDynColsFromResult(result, dynCols, dynColCellQualifiers);
+//        if (dynCols.isEmpty()) {
+//            return null;
+//        }
+//        populateDynamicColumnCells(result, dynColCellQualifiers, dynColCells);
+//        if (dynColCells.isEmpty()) {
+//            return null;
+//        }
+//        KeyValueSchema dynColsSchema = PhoenixRuntime.buildKeyValueSchema(dynCols);
+//        Expression[] expressions = new Expression[dynCols.size()];
+//        for (int i = 0; i < dynCols.size(); i++) {
+//            expressions[i] = new KeyValueColumnExpression(dynCols.get(i));
+//        }
+//        return new TupleProjector(dynColsSchema, expressions);
+//    }
+
     /**
      * Populate cells corresponding to dynamic columns
      * @param result list of cells

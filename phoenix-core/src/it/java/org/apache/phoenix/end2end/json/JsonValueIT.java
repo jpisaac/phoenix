@@ -842,7 +842,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals("[\"Sport\",\"Water polo\"]", rs.getString(4));
             assertEquals("{\"type\":1,\"address\":{\"town\":\"Bristol\",\"county\":\"Avon\",\"country\":\"England\"},\"tags\":[\"Sport\",\"Water polo\"]}", rs.getString(5));
             assertFalse(rs.next());
-
+fail();
             // Now check for empty match
             query = String.format(queryTemplate, "Windsors");
             rs = conn.createStatement().executeQuery(query);

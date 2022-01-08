@@ -28,6 +28,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -52,6 +54,11 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.JsonValueBFunction;
+import org.apache.phoenix.expression.function.JsonValueDCFunction;
+import org.apache.phoenix.expression.function.JsonValueFunction;
+import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -109,18 +116,37 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
     boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
-    Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
+    Set<KeyValueColumnExpression> serverParsedKVRefs = Sets.newHashSet();
     KeyValueSchema kvSchema = null;
     ValueBitSet kvSchemaBitSet = null;
-    Expression[] arrayFuncRefs = deserializeArrayPositionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
-    if (arrayFuncRefs != null) {
+    Expression[] serverParsedFuncRefs_array = deserializeServerParsedPositionalExpressionInfoFromScan(scan,  innerScanner, BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, serverParsedKVRefs);
+    Expression[] serverParsedFuncRefs_json = null;
+    if (scan.getAttribute(BaseScannerRegionObserver.JSON_VALUE_FUNCTION) != null) {
+      serverParsedFuncRefs_json = deserializeServerParsedPositionalExpressionInfoFromScan(scan, innerScanner, BaseScannerRegionObserver.JSON_VALUE_FUNCTION, serverParsedKVRefs);
+    } else if (scan.getAttribute(BaseScannerRegionObserver.JSON_VALUE_B_FUNCTION) != null) {
+      serverParsedFuncRefs_json = deserializeServerParsedPositionalExpressionInfoFromScan(scan, innerScanner, BaseScannerRegionObserver.JSON_VALUE_B_FUNCTION, serverParsedKVRefs);
+    } else if (scan.getAttribute(BaseScannerRegionObserver.JSON_VALUE_DC_FUNCTION) != null) {
+      serverParsedFuncRefs_json = deserializeServerParsedPositionalExpressionInfoFromScan(scan, innerScanner, BaseScannerRegionObserver.JSON_VALUE_DC_FUNCTION, serverParsedKVRefs);
+    } else if (scan.getAttribute(BaseScannerRegionObserver.JSON_VALUE_BSON_FUNCTION) != null) {
+      serverParsedFuncRefs_json = deserializeServerParsedPositionalExpressionInfoFromScan(scan, innerScanner, BaseScannerRegionObserver.JSON_VALUE_BSON_FUNCTION, serverParsedKVRefs);
+    }
+    List<Expression> resultList = new ArrayList<>();
+    if (serverParsedFuncRefs_array != null) {
+      Collections.addAll(resultList, serverParsedFuncRefs_array);
+    }
+    if (serverParsedFuncRefs_json != null) {
+      Collections.addAll(resultList, serverParsedFuncRefs_json);
+    }
+    Expression[] serverParsedFuncRefs = resultList.toArray(new Expression[0]);
+    if (serverParsedFuncRefs != null && serverParsedFuncRefs.length > 0) {
         KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
-        for (Expression expression : arrayFuncRefs) {
+        for (Expression expression : serverParsedFuncRefs) {
             builder.addField(expression);
         }
         kvSchema = builder.build();
         kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
     }
+
     TupleProjector tupleProjector = null;
     Region dataRegion = null;
     IndexMaintainer indexMaintainer = null;
@@ -154,13 +180,13 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         env.getConfiguration().get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY) != null) {
       dataRegion = env.getRegion();
     }
-    innerScanner = getWrappedScanner(env, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan, dataColumns,
+    innerScanner = getWrappedScanner(env, innerScanner, serverParsedKVRefs, serverParsedFuncRefs, offset, scan, dataColumns,
         tupleProjector, dataRegion, indexMaintainer, tx, viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null,
         ptr, useQualifierAsIndex);
 
     final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);
     if (j != null) {
-        innerScanner = new HashJoinRegionScanner(env, innerScanner, scan, arrayKVRefs, arrayFuncRefs,
+        innerScanner = new HashJoinRegionScanner(env, innerScanner, scan, serverParsedKVRefs, serverParsedFuncRefs,
                                                  p, j, tenantId, useQualifierAsIndex,
                                                  useNewValueColumnQualifier);
     }
@@ -235,9 +261,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
   }
 
-  private Expression[] deserializeArrayPositionalExpressionInfoFromScan(Scan scan, RegionScanner s,
-                                                                        Set<KeyValueColumnExpression> arrayKVRefs) {
-    byte[] specificArrayIdx = scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX);
+  private Expression[] deserializeServerParsedPositionalExpressionInfoFromScan(Scan scan, RegionScanner s,
+                                                                               String scanAttributeStr,
+                                                                               Set<KeyValueColumnExpression> serverParsedKVRefs) {
+    byte[] specificArrayIdx = scan.getAttribute(scanAttributeStr);
     if (specificArrayIdx == null) {
       return null;
     }
@@ -250,14 +277,25 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         KeyValueColumnExpression kvExp = scheme != PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN ? new SingleCellColumnExpression(scheme)
             : new KeyValueColumnExpression();
         kvExp.readFields(input);
-        arrayKVRefs.add(kvExp);
+        serverParsedKVRefs.add(kvExp);
       }
       int arrayKVFuncSize = WritableUtils.readVInt(input);
       Expression[] arrayFuncRefs = new Expression[arrayKVFuncSize];
       for (int i = 0; i < arrayKVFuncSize; i++) {
-        ArrayIndexFunction arrayIdxFunc = new ArrayIndexFunction();
-        arrayIdxFunc.readFields(input);
-        arrayFuncRefs[i] = arrayIdxFunc;
+        ScalarFunction func = null;
+        if (scanAttributeStr.equals(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX)) {
+          func = new ArrayIndexFunction();
+        } else if (scanAttributeStr.equals(BaseScannerRegionObserver.JSON_VALUE_FUNCTION))  {
+          func = new JsonValueFunction();
+        } else if (scanAttributeStr.equals(BaseScannerRegionObserver.JSON_VALUE_B_FUNCTION))  {
+          func = new JsonValueBFunction();
+        } else if (scanAttributeStr.equals(BaseScannerRegionObserver.JSON_VALUE_DC_FUNCTION))  {
+          func = new JsonValueDCFunction();
+        } else if (scanAttributeStr.equals(BaseScannerRegionObserver.JSON_VALUE_BSON_FUNCTION))  {
+          func = new BsonValueFunction();
+        }
+        func.readFields(input);
+        arrayFuncRefs[i] = func;
       }
       return arrayFuncRefs;
     } catch (IOException e) {
@@ -270,7 +308,6 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       }
     }
   }
-
 
   private RegionScanner getOffsetScanner(final RegionScanner s,
       final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
