@@ -961,11 +961,11 @@ fail();
         String indexName = "IDX_" + generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol json)";
+            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol bson)";
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (1,2, '" + JsonDoc1+ "')");
 
-            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName+ " (JSON_VALUE(JSONCOL,'$.test') include (col1)");
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName+ " (BSON_VALUE(JSONCOL,'$.type'), BSON_VALUE(JSONCOL,'$.info.address.town')) include (col)");
             SingleCellIndexIT.dumpTable(indexName);
             SingleCellIndexIT.dumpTable("SYSTEM.CATALOG");
             fail();
@@ -975,7 +975,7 @@ fail();
     }
 
     @Test
-    public void testExpressionIndex1() throws Exception {
+    public void testExpressionIndex2() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
@@ -985,8 +985,8 @@ fail();
 
             conn.createStatement().execute("UPSERT into " + tableName +" VALUES (1, 10, 'ten')");
             conn.createStatement().execute("UPSERT into " + tableName +" VALUES (2, 4, 'four')");
-            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName+ " (k2*2) include (k3)");
-            SingleCellIndexIT.dumpTable(indexName);
+            conn.createStatement().execute("CREATE LOCAL " + indexName + " ON " + tableName+ " (k2*2) ");
+            SingleCellIndexIT.dumpTable(tableName);
             SingleCellIndexIT.dumpTable("SYSTEM.CATALOG");
             fail();
         } catch (SQLException e) {
