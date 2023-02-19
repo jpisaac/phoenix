@@ -372,7 +372,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
         @Override public boolean next(List<Cell> outResult, ScannerContext scannerContext)
                 throws IOException {
 
-            LOG.info("0.TTLAwareStoreScanner scanner for PHOENIX-TTL. Stacktrace for informational purposes: "
+            LOG.info("0.PhoenixTTLStoreScanner scanner for PHOENIX-TTL. Stacktrace for informational purposes: "
                     +  LogUtil.getCallerStackTrace());
 
             LOG.info(String.format("***** 3.PHOENIX-TTL(Store): In next [%d] ************,", outResult.size()));
@@ -469,10 +469,10 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
     public void postCompactSelection(ObserverContext<RegionCoprocessorEnvironment> c, Store store, List<? extends StoreFile> selected, CompactionLifeCycleTracker tracker, CompactionRequest request) {
         super.postCompactSelection(c, store, selected, tracker, request);
 
-        if (request != null && request.getClass().isAssignableFrom(
-                PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest.class)) {
+        if (tracker != null && tracker.getClass().isAssignableFrom(
+                PhoenixTTLCompactorEndpoint.PhoenixTTLCompactionTracker.class)) {
 
-            Scan scan = ((PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest) request).getScan();
+            Scan scan = ((PhoenixTTLCompactorEndpoint.PhoenixTTLCompactionTracker) tracker).getScan();
             String tenantId = Bytes.toString(scan.getAttribute("__TenantId"));
             String viewName = Bytes.toString(scan.getAttribute("__ViewName"));
             String startRow = Bytes.toString(scan.getStartRow());
@@ -480,7 +480,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
             String filter = scan.getFilter() != null ? scan.getFilter().toString() : "NO_FILTER";
 
             LOG.info(String.format(
-                    "********** 1.PHOENIX-TTL(Store): TTLAwareRegionObserver::preCompactSelection "
+                    "********** 1.PHOENIX-TTL(Store): PhoenixTTLStoreScanner::postCompactSelection "
                             + "region = [%s], "
                             + "tenantId = %s  "
                             + "viewName = %s  "
@@ -495,7 +495,6 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
                     stopRow,
                     filter));
 
-            //return new TTLAwareRegionScanner(c.getEnvironment(), scan, s);
         }
 
     }
@@ -507,8 +506,8 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
     @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store, InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker, CompactionRequest request) throws IOException {
-        if (request != null && request.getClass().isAssignableFrom(
-                PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest.class)) {
+        if (tracker != null && tracker.getClass().isAssignableFrom(
+                PhoenixTTLCompactorEndpoint.PhoenixTTLCompactionTracker.class)) {
             //c.bypass();
             //c.complete();
             Configuration conf = c.getEnvironment().getConfiguration();
@@ -516,7 +515,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
 
 
-            Scan scan = ((PhoenixTTLCompactorEndpoint.PhoenixTTLAwareCompactionRequest) request).getScan();
+            Scan scan = ((PhoenixTTLCompactorEndpoint.PhoenixTTLCompactionTracker) tracker).getScan();
             String tenantId = Bytes.toString(scan.getAttribute("__TenantId"));
             String viewName = Bytes.toString(scan.getAttribute("__ViewName"));
             String startRow = Bytes.toString(scan.getStartRow());
@@ -524,7 +523,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
             String filter = scan.getFilter() != null ? scan.getFilter().toString() : "NO_FILTER";
 
             LOG.info(String.format(
-                    "********** 2.PHOENIX-TTL(Store): TTLAwareRegionObserver::preCompactScannerOpen "
+                    "********** 2.PHOENIX-TTL(Store): PhoenixTTLStoreScanner::preCompact "
                             + "region = [%s], "
                             + "tenantId = %s  "
                             + "viewName = %s  "

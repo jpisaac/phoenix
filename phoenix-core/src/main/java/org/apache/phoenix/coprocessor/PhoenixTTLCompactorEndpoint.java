@@ -2,6 +2,7 @@ package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.hbase.coprocessor.*;
 import org.apache.hadoop.hbase.regionserver.*;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -20,26 +21,26 @@ import org.apache.phoenix.coprocessor.generated.CompactionProtos.CompactionServi
 import org.apache.phoenix.coprocessor.generated.CompactionProtos.PhoenixTTLExpiredCompactionRequest;
 import org.apache.phoenix.coprocessor.generated.CompactionProtos.PhoenixTTLExpiredCompactionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-public class PhoenixTTLCompactorEndpoint extends CompactionService implements RegionCoprocessor {
+public class PhoenixTTLCompactorEndpoint extends CompactionService implements CoprocessorService, RegionCoprocessor {
+    private static final Logger LOG = LoggerFactory.getLogger(PhoenixTTLCompactorEndpoint.class);
 
-    public static class PhoenixTTLAwareCompactionRequest implements CompactionRequest {
+    public static class PhoenixTTLCompactionTracker implements CompactionLifeCycleTracker {
 
         private CountDownLatch done;
         private Scan serializedScanRequest;
 
-        public PhoenixTTLAwareCompactionRequest(Scan serializedScanRequest, CountDownLatch finished) {
+        public PhoenixTTLCompactionTracker(Scan serializedScanRequest, CountDownLatch finished) {
             this.serializedScanRequest = serializedScanRequest;
             this.done = finished;
-        }
-
-        public void afterExecute() {
-            this.done.countDown();
         }
 
         public Scan getScan() {
@@ -47,38 +48,29 @@ public class PhoenixTTLCompactorEndpoint extends CompactionService implements Re
         }
 
         @Override
-        public Collection<? extends StoreFile> getFiles() {
-            return null;
+        public void notExecuted(Store store, String reason) {
+            LOG.info(String.format("PhoenixTTLCompactionTracker.notExecuted %s", store.getRegionInfo().getRegionNameAsString()));
+            CompactionLifeCycleTracker.super.notExecuted(store, reason);
+            done.countDown();
         }
 
         @Override
-        public long getSize() {
-            return 0;
+        public void beforeExecution(Store store) {
+            LOG.info(String.format("PhoenixTTLCompactionTracker.beforeExecution %s", store.getRegionInfo().getRegionNameAsString()));
+            CompactionLifeCycleTracker.super.beforeExecution(store);
         }
 
         @Override
-        public boolean isAllFiles() {
-            return false;
+        public void afterExecution(Store store) {
+            LOG.info(String.format("PhoenixTTLCompactionTracker.afterExecution %s", store.getRegionInfo().getRegionNameAsString()));
+            CompactionLifeCycleTracker.super.afterExecution(store);
+            done.countDown();
         }
 
         @Override
-        public boolean isMajor() {
-            return false;
-        }
-
-        @Override
-        public int getPriority() {
-            return 0;
-        }
-
-        @Override
-        public boolean isOffPeak() {
-            return false;
-        }
-
-        @Override
-        public long getSelectionTime() {
-            return 0;
+        public void completed() {
+            LOG.info(String.format("PhoenixTTLCompactionTracker.completed"));
+            CompactionLifeCycleTracker.super.completed();
         }
     }
 
@@ -99,6 +91,15 @@ public class PhoenixTTLCompactorEndpoint extends CompactionService implements Re
 
     @Override public void stop(CoprocessorEnvironment env) throws IOException {
 
+    }
+
+    @Override
+    public Iterable<Service> getServices() {
+        return Collections.singleton(this);
+    }
+    @Override
+    public Service getService() {
+        return this;
     }
 
     @Override public void compactPhoenixTTLExpiredRows(RpcController controller,
@@ -141,33 +142,28 @@ public class PhoenixTTLCompactorEndpoint extends CompactionService implements Re
      * @throws IOException if we fail to complete the compaction
      */
     private void compactRegionAndBlockUntilDone(CompactionRequester requestor,
-            PhoenixTTLExpiredCompactionRequest request,
-            Region region)
+            PhoenixTTLExpiredCompactionRequest request, HRegion region)
             throws NotServingRegionException, IOException {
 
-        CountDownLatch tracker = new CountDownLatch(region.getStores().size());
-        List<CountDownLatch> allDone = Lists.newArrayListWithExpectedSize(region.getStores().size());
-        List<Pair<CompactionRequest, Store>>
-                crs = Lists.newArrayListWithExpectedSize(region.getStores().size());
+        CountDownLatch allDone = new CountDownLatch(region.getStores().size());
         ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(request.getSerializedScanFilter());
         Scan serverScan = ProtobufUtil.toScan(destProtoScan);
+        PhoenixTTLCompactionTracker tracker = new PhoenixTTLCompactionTracker(serverScan, allDone);
 
-        for (Store store : region.getStores()) {
-            crs.add(new Pair<CompactionRequest, Store>(new PhoenixTTLAwareCompactionRequest(serverScan, tracker), store));
-        }
-        /*
         try {
-            requestor.requestCompaction(region,
-                    "Compacting all phoenix ttl expired rows for region: " +
-                            region.getRegionInfo().getRegionNameAsString(), crs);
-            //tracker.await();
+            for (Store store : region.getStores()) {
+                HStore hstore = (HStore) store;
+                LOG.info(String.format("Before.requestCompaction %s", store.getRegionInfo().getRegionNameAsString()));
+                requestor.requestCompaction(region, hstore, "Compacting all phoenix ttl expired rows for region: " +
+                        region.getRegionInfo().getRegionNameAsString(), Store.PRIORITY_USER, tracker, null);
+                LOG.info(String.format("After.requestCompaction %s", store.getRegionInfo().getRegionNameAsString()));
+            }
+            allDone.await();
         } catch (Exception e) { // InterruptedException e
             throw new IOException("Interrupted while waiting for compaction on "
                     + region.getRegionInfo().getRegionNameAsString()
                     + " to complete", e);
         }
-
-        */
 
     }
 }

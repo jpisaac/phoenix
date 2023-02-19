@@ -1,11 +1,13 @@
 package org.apache.phoenix.end2end;
 
+import com.google.protobuf.RpcController;
+import org.apache.phoenix.coprocessor.PhoenixTTLCompactorEndpoint;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
@@ -14,6 +16,10 @@ import com.google.protobuf.RpcCallback;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.generated.CompactionProtos;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos.CompactionService;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos.PhoenixTTLExpiredCompactionRequest;
+import org.apache.phoenix.coprocessor.generated.CompactionProtos.PhoenixTTLExpiredCompactionResponse;
+
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -42,17 +48,16 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-public class ViewTTLCompactionIT extends BaseTest {
+public class ViewTTLCompactionIT extends LocalHBaseIT {
     private static final Logger LOG = LoggerFactory.getLogger(ViewTTLCompactionIT.class);
 
-    String tenantId = "00D0t001T000001";
+    //String tenantId = "00D0t001T000001";
     String multiTenantTableName = "TEST_ENTITY.BASE_HBPO_WITH_TTL";
     String multiTenantGlobalView = "TEST_ENTITY.GLOBAL_V000001_WITH_TTL";
     String multiTenantViewName = "TEST_ENTITY.ECZ";
 
-    /*
     @Test public void testViewCompaction() throws Exception {
-        String tenantId = generateUniqueName();
+        String tenantId = "00D0t001T000001";
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         String schema = generateUniqueName();
@@ -78,11 +83,17 @@ public class ViewTTLCompactionIT extends BaseTest {
                         + "CONSTRAINT PK PRIMARY KEY (TENANT_ID, KP)) MULTI_TENANT=true";
 
         String
+                multiTenantGlobalViewDDL =
+                "CREATE VIEW IF NOT EXISTS " + multiTenantGlobalView + "(G1 BIGINT, G2 BIGINT) "
+                        + "AS SELECT * FROM " + multiTenantTableName + " WHERE KP = 'ECZ' PHOENIX_TTL=30";
+
+        String
                 globalViewDDL =
                 "CREATE VIEW IF NOT EXISTS " + globalViewName + "(G1 BIGINT, G2 BIGINT) "
                         + "AS SELECT * FROM " + multiTenantTableName + " WHERE KP = '001' PHOENIX_TTL=30";
 
-        String viewDDL = "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) AS SELECT * FROM %s PHOENIX_TTL=30";
+        String multiTenantViewDDL = "CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s";
+        String viewDDL = "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) AS SELECT * FROM %s";
         String
                 viewIndexDDL =
                 "CREATE INDEX IF NOT EXISTS " + tenantViewIndex + " ON " + tenantViewOnGlobalView
@@ -91,11 +102,12 @@ public class ViewTTLCompactionIT extends BaseTest {
         String
                 customObjectViewDDL =
                 "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) " + "AS SELECT * FROM "
-                        + multiTenantTableName + " WHERE KP = '%s' PHOENIX_TTL=30";
+                        + multiTenantTableName + " WHERE KP = '%s' ";
 
         String selectFromViewSQL = "SELECT * FROM %s";
 
         List<String> dmls = Arrays.asList(new String[] {
+                String.format(multiTenantViewDDL, multiTenantViewName, multiTenantGlobalView),
                 String.format(viewDDL, tenantViewOnGlobalView, globalViewName),
                 String.format(customObjectViewDDL, customObjectView1, view1),
                 String.format(customObjectViewDDL, customObjectView2, view2),
@@ -110,8 +122,14 @@ public class ViewTTLCompactionIT extends BaseTest {
             }
             // Global view.
             try (Statement stmt = conn.createStatement()) {
+                stmt.execute(multiTenantGlobalViewDDL);
+            }
+
+            // Global view.
+            try (Statement stmt = conn.createStatement()) {
                 stmt.execute(globalViewDDL);
             }
+
             // Tenant views and indexes.
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
                 for (String dml : dmls) {
@@ -123,7 +141,7 @@ public class ViewTTLCompactionIT extends BaseTest {
         }
 
 
-        Scan clientScan = getScan(multiTenantViewName);
+        Scan clientScan = getScan(tenantViewOnGlobalView, false, tenantId);
         ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(clientScan);
         byte[] srcBytes = srcProtoScan.toByteArray();
         ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(srcBytes);
@@ -140,31 +158,30 @@ public class ViewTTLCompactionIT extends BaseTest {
 
     }
 
-     */
 
 
 
     void compactView(Table parentTable, final String multiTenantViewName, final ClientProtos.Scan srcProtoScan) throws Throwable {
 
-        final Map<byte[], CompactionProtos.PhoenixTTLExpiredCompactionResponse>
+        final Map<byte[], PhoenixTTLExpiredCompactionResponse>
                 results =
-                parentTable.coprocessorService(CompactionProtos.CompactionService.class, null, null,
-                        new Batch.Call<CompactionProtos.CompactionService, CompactionProtos.PhoenixTTLExpiredCompactionResponse>() {
+                parentTable.coprocessorService(CompactionService.class, null, null,
+                        new Batch.Call<CompactionService, PhoenixTTLExpiredCompactionResponse>() {
                             @Override
-                            public CompactionProtos.PhoenixTTLExpiredCompactionResponse call(
-                                    CompactionProtos.CompactionService instance)
+                            public PhoenixTTLExpiredCompactionResponse call(
+                                    CompactionService instance)
                                     throws IOException {
                                 ServerRpcController controller = new ServerRpcController();
-                                BlockingRpcCallback<CompactionProtos.PhoenixTTLExpiredCompactionResponse>
+                                BlockingRpcCallback<PhoenixTTLExpiredCompactionResponse>
                                         rpcCallback =
-                                        new BlockingRpcCallback<CompactionProtos.PhoenixTTLExpiredCompactionResponse>();
+                                        new BlockingRpcCallback<PhoenixTTLExpiredCompactionResponse>();
                                 CompactionProtos.PhoenixTTLExpiredCompactionRequest.Builder
                                         builder =
                                         CompactionProtos.PhoenixTTLExpiredCompactionRequest
                                                 .newBuilder();
                                 builder.setPhoenixTTL(180000);
                                 builder.setSerializedScanFilter(srcProtoScan.toByteString());
-                                instance.compactPhoenixTTLExpiredRows(controller, builder.build(), (RpcCallback<CompactionProtos.PhoenixTTLExpiredCompactionResponse>) rpcCallback);
+                                instance.compactPhoenixTTLExpiredRows(controller, builder.build(), rpcCallback);
                                 if (controller.getFailedOn() != null) {
                                     throw controller.getFailedOn();
                                 }
@@ -182,7 +199,8 @@ public class ViewTTLCompactionIT extends BaseTest {
 
     @Test public void testCompaction() throws Exception {
         boolean global = false;
-        Scan clientScan = getScan(multiTenantViewName, !global);
+        String tenantId = "Txt00m100000000";
+        Scan clientScan = getScan("PHX_TTL.C01", !global, tenantId);
         //Scan clientScan = getScan(multiTenantGlobalView, global);
         ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(clientScan);
         byte[] srcBytes = srcProtoScan.toByteArray();
@@ -190,13 +208,13 @@ public class ViewTTLCompactionIT extends BaseTest {
         Scan serverScan = ProtobufUtil.toScan(destProtoScan);
 
         // Compact the various tables and views
-        String connectUrl = global ? "jdbc:phoenix:localhost;" :
-                "jdbc:phoenix:localhost;" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String connectUrl = global ? getUrl() :
+                getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
 
         try (Connection conn = DriverManager.getConnection(connectUrl)) {
             Table parentTable = conn.unwrap(PhoenixConnection.class).getQueryServices().
-                    getTable(Bytes.toBytes(multiTenantTableName));
-            compactView(parentTable, multiTenantViewName, srcProtoScan);
+                    getTable(Bytes.toBytes("PHX_TTL.CUSTOM_DATA"));
+            compactView(parentTable, "PHX_TTL.C01", srcProtoScan);
         } catch (Throwable throwable) {
             throwable.printStackTrace();
         }
@@ -205,8 +223,9 @@ public class ViewTTLCompactionIT extends BaseTest {
     @Test public void testScans() throws Exception {
 
         boolean global = true;
-        Scan scan = getScan(multiTenantGlobalView, global);
-        //Scan scan = getScan(multiTenantViewName, !global);
+        String tenantId = "Txt00m100000000";
+        Scan scan = getScan(multiTenantGlobalView, global, "");
+        //Scan scan = getScan(multiTenantViewName, !global, tenantId);
         ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(scan);
         byte[] srcBytes = srcProtoScan.toByteArray();
         ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(srcBytes);
@@ -222,13 +241,13 @@ public class ViewTTLCompactionIT extends BaseTest {
 
     }
 
-    private Scan getScan(String viewName, boolean global)
+    private Scan getScan(String viewName, boolean tenant, String tenantId)
             throws SQLException {
 
         Properties props = new Properties();
         props.setProperty("phoenix.ttl.client_side.masking.enabled", "false");
-        String connectUrl = global ? "jdbc:phoenix:localhost;" :
-                 "jdbc:phoenix:localhost;" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String connectUrl = !tenant ? getUrl() :
+                 getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
 
         try (Connection deleteConnection = DriverManager.getConnection(connectUrl, props);
                 final Statement statement = deleteConnection.createStatement()) {
