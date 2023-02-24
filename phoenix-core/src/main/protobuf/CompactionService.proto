@@ -23,8 +23,7 @@ option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 
 message PhoenixTTLExpiredCompactionRequest {
-  required int64 phoenixTTL = 1;
-  required bytes serializedScanFilter = 2;
+  required bytes serializedScanFilter = 1;
 }
 
 message PhoenixTTLExpiredCompactionResponse {

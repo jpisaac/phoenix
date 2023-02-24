@@ -179,7 +179,7 @@ public class ViewTTLCompactionIT extends LocalHBaseIT {
                                         builder =
                                         CompactionProtos.PhoenixTTLExpiredCompactionRequest
                                                 .newBuilder();
-                                builder.setPhoenixTTL(180000);
+                                //builder.setPhoenixTTL(180000);
                                 builder.setSerializedScanFilter(srcProtoScan.toByteString());
                                 instance.compactPhoenixTTLExpiredRows(controller, builder.build(), rpcCallback);
                                 if (controller.getFailedOn() != null) {
@@ -199,8 +199,10 @@ public class ViewTTLCompactionIT extends LocalHBaseIT {
 
     @Test public void testCompaction() throws Exception {
         boolean global = false;
-        String tenantId = "Txt00m100000000";
-        Scan clientScan = getScan("PHX_TTL.C01", !global, tenantId);
+        String tenantId = "Txt00m100000049";
+        String parentTableName = "PHX_TTL.TABLE_6CF";
+        String viewName = "PHX_TTL.CF6";
+        Scan clientScan = getScan(viewName, !global, tenantId);
         //Scan clientScan = getScan(multiTenantGlobalView, global);
         ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(clientScan);
         byte[] srcBytes = srcProtoScan.toByteArray();
@@ -213,8 +215,8 @@ public class ViewTTLCompactionIT extends LocalHBaseIT {
 
         try (Connection conn = DriverManager.getConnection(connectUrl)) {
             Table parentTable = conn.unwrap(PhoenixConnection.class).getQueryServices().
-                    getTable(Bytes.toBytes("PHX_TTL.CUSTOM_DATA"));
-            compactView(parentTable, "PHX_TTL.C01", srcProtoScan);
+                    getTable(Bytes.toBytes(parentTableName));
+            compactView(parentTable, viewName, srcProtoScan);
         } catch (Throwable throwable) {
             throwable.printStackTrace();
         }
@@ -222,10 +224,10 @@ public class ViewTTLCompactionIT extends LocalHBaseIT {
 
     @Test public void testScans() throws Exception {
 
-        boolean global = true;
-        String tenantId = "Txt00m100000000";
-        Scan scan = getScan(multiTenantGlobalView, global, "");
-        //Scan scan = getScan(multiTenantViewName, !global, tenantId);
+        boolean tenant = true;
+        String tenantId = "Txt00m100000079";
+        Scan scan = getScan("PHX_TTL.CF6", tenant, tenantId);
+        //Scan scan = getScan("PHX_TTL.CUSTOM_DATA", !tenant, "");
         ClientProtos.Scan srcProtoScan = ProtobufUtil.toScan(scan);
         byte[] srcBytes = srcProtoScan.toByteArray();
         ClientProtos.Scan destProtoScan = ClientProtos.Scan.parseFrom(srcBytes);
@@ -234,10 +236,14 @@ public class ViewTTLCompactionIT extends LocalHBaseIT {
         LOG.info(String.format("1.startRow : %s", Bytes.toStringBinary(scan.getStartRow())));
         LOG.info(String.format("1.stopRow : %s", Bytes.toString(scan.getStopRow())));
         LOG.info(String.format("1.filter : %s", scan.getFilter() != null ? scan.getFilter().toString() : "NO_FILTER"));
+        LOG.info(String.format("1.ECFN : %s", Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME))));
+        LOG.info(String.format("1.ECQN : %s", Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME))));
 
         LOG.info(String.format("2.startRow : %s", Bytes.toStringBinary(serverScan.getStartRow())));
         LOG.info(String.format("2.stopRow : %s", Bytes.toString(serverScan.getStopRow())));
         LOG.info(String.format("2.filter : %s", serverScan.getFilter() != null ? serverScan.getFilter().toString() : "NO_FILTER"));
+        LOG.info(String.format("2.ECFN : %s", Bytes.toString(serverScan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME))));
+        LOG.info(String.format("2.ECQN : %s", Bytes.toString(serverScan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME))));
 
     }
 
