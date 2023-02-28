@@ -2113,12 +2113,15 @@ public class MetaDataClient {
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                 }
 
-                if (tableType != VIEW) {
+                if ((tableType != VIEW) && (tableType != TABLE)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY)
                             .setSchemaName(schemaName)
                             .setTableName(tableName)
                             .build()
                             .buildException();
+                }
+                if ((tableType == TABLE) && (phoenixTTLProp != null)) {
+                    phoenixTTL =  phoenixTTLProp;
                 }
             }
 
