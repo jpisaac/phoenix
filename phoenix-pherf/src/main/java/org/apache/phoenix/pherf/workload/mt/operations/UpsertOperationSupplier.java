@@ -52,7 +52,7 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
     @Override
     public Function<TenantOperationInfo, OperationStats> get() {
         return new Function<TenantOperationInfo, OperationStats>() {
-
+            Connection globalConnection;
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
                 Preconditions.checkNotNull(input);
@@ -77,7 +77,17 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
                 int status = 0;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
-                try (Connection connection = phoenixUtil.getConnection(tenantId)) {
+                if (tenantId == null) {
+                    try {
+                        globalConnection = phoenixUtil.getConnection(null);
+                    } catch (Exception sqle) {
+                        LOGGER.error("Operation " + opName + " failed with exception ", sqle);
+                        status = -1;
+                    }
+                    totalDuration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                    return new OperationStats(input, startTime, status, rowsCreated, totalDuration);
+                }
+                try (Connection connection = (tenantId == null ? globalConnection : phoenixUtil.getConnection(tenantId))) {
                     // If list of columns has not been not provided or lazy loaded
                     // then use the metadata call to get the column list.
                     if (upsert.getColumn().isEmpty()) {
@@ -138,7 +148,9 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
                                 duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                                 LOGGER.info("Writer ( " + Thread.currentThread().getName()
                                         + ") committed Final Batch. Duration (" + duration + ") Ms");
-                                connection.close();
+                                if (tenantId != null) {
+                                    connection.close();
+                                }
                             } catch (SQLException e) {
                                 // Swallow since we are closing anyway
                                 LOGGER.error("Error when closing/committing", e);
