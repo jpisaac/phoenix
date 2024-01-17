@@ -144,6 +144,9 @@
 				<excludes>
 					<exclude>**/*.sql</exclude>
 					<exclude>**/*.xml</exclude>
+					<exclude>*.properties</exclude>
+					<exclude>*.sh</exclude>
+
 				</excludes>
 			</resource>
 		</resources>
