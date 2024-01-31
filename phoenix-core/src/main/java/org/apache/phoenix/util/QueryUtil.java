@@ -780,6 +780,7 @@ public final class QueryUtil {
             }
         }
         buf.append(" order by 4, 1, 2, 3\n");
+        LOGGER.info(String.format("getTablesStmt - %s", buf.toString()));
         PreparedStatement stmt = connection.prepareStatement(buf.toString());
         for (int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
