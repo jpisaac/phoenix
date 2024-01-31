@@ -27,6 +27,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +55,7 @@ public class PreScenarioOperationSupplier extends BaseOperationSupplier {
                 final String opGroup = input.getOperationGroupId();
                 final String tableName = input.getTableName();
                 final String scenarioName = input.getScenarioName();
-                final boolean isTenantGroupGlobal = (tenantGroup.compareTo(TenantGroup.DEFAULT_GLOBAL_ID) == 0);
+                final String threadName = Thread.currentThread().getName();
 
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 int status = 0;
@@ -64,8 +65,9 @@ public class PreScenarioOperationSupplier extends BaseOperationSupplier {
                         // Check whether we need to use global connection
                         // if useGlobalConnection = true then a tenantId = "TGLOBAL00000000" will be logged.
                         final String tenantId = input.isUseGlobalConnection() || ddl.isUseGlobalConnection() ? null : input.getTenantId();
-                        final String opName = String.format("%s:%s:%s:%s:%s",
-                                scenarioName, tableName, opGroup, tenantGroup, input.getTenantId());
+                        final String opName = String.format("%s:%s:%s:%s:%s:%s",
+                                scenarioName, tableName, opGroup, tenantGroup, input.getTenantId(),
+                                threadName);
 
                         try (Connection conn = phoenixUtil.getConnection(tenantId)) {
                             LOGGER.info("\nExecuting DDL:" + ddl + ", OPERATION:" + opName);

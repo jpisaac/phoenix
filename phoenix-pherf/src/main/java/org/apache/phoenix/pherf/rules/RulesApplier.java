@@ -437,7 +437,7 @@ public class RulesApplier {
 
         // Later we can add support fo other data types if needed.Right now, we just do this for dates
         Preconditions.checkArgument((retValue.getMinValue() != null) || (retValue.getMaxValue() != null), "Both min/maxValue tags must be set if value tag is not used");
-        Preconditions.checkArgument((retValue.getType() == DataTypeMapping.DATE), "Currently on DATE is supported for ranged random values");
+        //Preconditions.checkArgument((retValue.getType() == DataTypeMapping.DATE), "Currently on DATE is supported for ranged random values");
 
         retValue.setValue(generateRandomDate(retValue.getMinValue(), retValue.getMaxValue()));
 

@@ -148,7 +148,6 @@ public abstract class BaseLoadEventGenerator
 
     @Override public void start() throws Exception {
         Scenario scenario = operationFactory.getScenario();
-        String currentThreadName = Thread.currentThread().getName();
         int bufferSize = DEFAULT_BUFFER_SIZE;
         if (properties.containsKey("pherf.mt.buffer_size_per_scenario")) {
             bufferSize = Integer.parseInt((String)properties.get("pherf.mt.buffer_size_per_scenario"));
@@ -156,7 +155,7 @@ public abstract class BaseLoadEventGenerator
 
         disruptor = new Disruptor<>(TenantOperationEvent.EVENT_FACTORY, bufferSize,
                 new ThreadFactoryBuilder()
-                        .setNameFormat(currentThreadName + "." + scenario.getName())
+                        .setNameFormat("event-generator" + "-" + scenario.getName().toLowerCase() + "-%d")
                         .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER)
                         .build(),
                 ProducerType.SINGLE, new BlockingWaitStrategy());
