@@ -35,6 +35,7 @@ import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,21 +114,25 @@ public class PhoenixUtil {
     }
 
     public Connection getConnection(String tenantId) throws Exception {
-        return getConnection(tenantId, testEnabled, null);
+        return getConnection(tenantId, null, testEnabled, null);
+    }
+
+    public Connection getConnection(String principal, String tenantId) throws Exception {
+        return getConnection(tenantId, principal, testEnabled, null);
     }
 
     public Connection getConnection(String tenantId,
                                     Properties properties) throws  Exception {
         Map<String, String> propertyHashMap = getPropertyHashMap(properties);
-        return getConnection(tenantId, testEnabled, propertyHashMap);
+        return getConnection(tenantId, null, testEnabled, propertyHashMap);
     }
     
     public Connection getConnection(String tenantId,
                                     Map<String, String> propertyHashMap) throws Exception {
-        return getConnection(tenantId, testEnabled, propertyHashMap);
+        return getConnection(tenantId, null, testEnabled, propertyHashMap);
     }
 
-    public Connection getConnection(String tenantId, boolean testEnabled,
+    public Connection getConnection(String tenantId, String principalName, boolean testEnabled,
                                     Map<String, String> propertyHashMap) throws Exception {
         if (useThinDriver) {
             if (null == queryServerUrl) {
@@ -161,7 +166,11 @@ public class PhoenixUtil {
             	}
             }
             
-            String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
+            String url = "jdbc:phoenix:" + zookeeper +
+                    ((principalName == null || principalName.isEmpty()) ?
+                    "" :
+                    PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + principalName) +
+                    (testEnabled ? ";test=true" : "");
             return DriverManager.getConnection(url, props);
         }
     }

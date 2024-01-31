@@ -18,6 +18,11 @@
 
 package org.apache.phoenix.pherf.workload.mt.operations;
 
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheLoader;
+import org.apache.phoenix.thirdparty.com.google.common.cache.LoadingCache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalNotification;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
@@ -36,6 +41,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -45,6 +51,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class UpsertOperationSupplier extends BaseOperationSupplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpsertOperationSupplier.class);
     private ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    LoadingCache<String, Connection> connectionCache;
 
     public UpsertOperationSupplier(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
         super(phoenixUtil, model, scenario);
@@ -52,7 +59,41 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
     @Override
     public Function<TenantOperationInfo, OperationStats> get() {
         return new Function<TenantOperationInfo, OperationStats>() {
-            Connection globalConnection;
+            private LoadingCache<String, Connection> initializeConnectionCache() {
+                RemovalListener<String, Connection> cacheRemovalListener =
+                        new RemovalListener<String, Connection>() {
+                            @Override
+                            public void onRemoval(
+                                    RemovalNotification<String, Connection> notification) {
+                                String connInfoIdentifier = notification.getKey();
+                                LOGGER.debug("Expiring " + connInfoIdentifier + " because of "
+                                        + notification.getCause().name());
+                                try {
+                                    notification.getValue().close();
+                                }
+                                catch (SQLException se) {
+                                    LOGGER.error("Error while closing expired cache connection " + connInfoIdentifier, se);
+                                }
+                            }
+                        };
+                return CacheBuilder.newBuilder()
+                        .maximumSize(100)
+                        .expireAfterAccess(600000, TimeUnit.MILLISECONDS)
+                        .removalListener(cacheRemovalListener)
+                        .recordStats()
+                        .build(new CacheLoader<String, Connection>() {
+                            @Override
+                            public Connection load(String key) throws Exception {
+                                String[] keyParts = key.split(":");
+                                String groupId = keyParts.length >= 1 ? keyParts[0] : TenantGroup.DEFAULT_GLOBAL_ID;
+                                String principalName = keyParts.length >= 1 ? keyParts[1] : TenantGroup.DEFAULT_GLOBAL_ID;
+                                return groupId.equalsIgnoreCase(TenantGroup.DEFAULT_GLOBAL_ID) ?
+                                        phoenixUtil.getConnection(principalName, (String)null) :
+                                        phoenixUtil.getConnection(principalName, key);
+                            }
+                        });
+            }
+
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
                 Preconditions.checkNotNull(input);
@@ -77,6 +118,20 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
                 int status = 0;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
+                if (connectionCache == null) {
+                    rwLock.writeLock().lock();
+                    try {
+                        if (connectionCache == null) {
+                            LOGGER.info("Initialized connectionCache");
+                            connectionCache = initializeConnectionCache();
+                        }
+                    } finally {
+                        rwLock.writeLock().unlock();
+                    }
+                }
+
+
+                /*
                 if (tenantId == null) {
                     try {
                         globalConnection = phoenixUtil.getConnection(null);
@@ -87,7 +142,13 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
                     totalDuration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     return new OperationStats(input, startTime, status, rowsCreated, totalDuration);
                 }
-                try (Connection connection = (tenantId == null ? globalConnection : phoenixUtil.getConnection(tenantId))) {
+
+                 */
+                try {
+                    String groupId = input.isUseGlobalConnection() ? tenantGroup : input.getTenantId();
+                    String threadName = Thread.currentThread().getName();
+                    String connId = String.format("%s:%s", groupId, threadName);
+                    Connection connection = connectionCache.get(connId);
                     // If list of columns has not been not provided or lazy loaded
                     // then use the metadata call to get the column list.
                     if (upsert.getColumn().isEmpty()) {
@@ -106,7 +167,9 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
                     }
 
                     String sql = phoenixUtil.buildSql(upsert.getColumn(), tableName);
-                    LOGGER.info("Operation " + opName + " executing " + sql);
+                    LOGGER.info("Operation " + opName + " executing " + sql + " using "
+                            + connId + " with " + connectionCache.stats().toString());
+
                     startTime = EnvironmentEdgeManager.currentTimeMillis();
                     PreparedStatement stmt = null;
                     try {
@@ -148,9 +211,9 @@ public class UpsertOperationSupplier extends BaseOperationSupplier {
                                 duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                                 LOGGER.info("Writer ( " + Thread.currentThread().getName()
                                         + ") committed Final Batch. Duration (" + duration + ") Ms");
-                                if (tenantId != null) {
-                                    connection.close();
-                                }
+//                                if (tenantId != null) {
+//                                    connection.close();
+//                                }
                             } catch (SQLException e) {
                                 // Swallow since we are closing anyway
                                 LOGGER.error("Error when closing/committing", e);
