@@ -67,6 +67,8 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
@@ -74,6 +76,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -153,6 +156,12 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         case Types.TIMESTAMP:
             pkTypeStr = "TIMESTAMP";
             break;
+        case Types.VARBINARY:
+            pkTypeStr = "VARBINARY";
+            break;
+        case 9000:
+            pkTypeStr = "VARBINARY_ENCODED";
+            break;
         default:
             pkTypeStr = "VARCHAR(25)";
         }
@@ -183,6 +192,18 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         case Types.TIMESTAMP:
             //pkTypeStr = "TIMESTAMP";
             return new Timestamp(System.currentTimeMillis() + rnd.nextInt(50000));
+        case Types.VARBINARY:
+            // pkTypeStr = "VARBINARY";
+            return ByteUtil.concat(
+                    RandomStringUtils.randomAlphanumeric(25).getBytes(),
+                    Bytes.toBytes(rnd.nextInt(50000)),
+                    Bytes.toBytes(Math.floor(rnd.nextInt(50000) * rnd.nextDouble())));
+        case 9000:
+            // pkTypeStr = "VARBINARY_ENCODED";
+            return ByteUtil.concat(
+                    RandomStringUtils.randomAlphanumeric(25).getBytes(),
+                    Bytes.toBytes(rnd.nextInt(50000)),
+                    Bytes.toBytes(Math.floor(rnd.nextInt(50000) * rnd.nextDouble())));
         default:
             // pkTypeStr = "VARCHAR(25)";
             return RandomStringUtils.randomAlphanumeric(25);
@@ -271,17 +292,21 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                                 "CONSTRAINT pk PRIMARY KEY (ID1 %s, ID2 %s, ID3 %s, ROW_ID)) " +
                                 "AS SELECT * FROM %s WHERE KP = '%s'";
 
-                cstmt.execute(String.format(VIEW_TEMPLATE, globalViewName, pkType1Str, pkType2Str,
+                String globalViewSQL = String.format(VIEW_TEMPLATE, globalViewName, pkType1Str, pkType2Str,
                         pkType3Str, pkOrders[0].name(), pkOrders[1].name(), pkOrders[2].name(),
-                        baseTableName, partitionName));
+                        baseTableName, partitionName);
+                LOGGER.info(String.format("Created global view %s", globalViewSQL));
+                cstmt.execute(globalViewSQL);
                 if (hasGlobalViewIndexes) {
                     String indexNamePrefix = String.format("G%s", partition);
                     String
                             GLOBAL_INDEX_TEMPLATE =
                             "CREATE INDEX IF NOT EXISTS %s_COL2_INDEX ON %s (COL2) " +
                                     "INCLUDE(SYSTEM_MODSTAMP)";
-                    cstmt.execute(
-                            String.format(GLOBAL_INDEX_TEMPLATE, indexNamePrefix, globalViewName));
+                    String globalViewIndexSQL =
+                            String.format(GLOBAL_INDEX_TEMPLATE, indexNamePrefix, globalViewName);
+                    LOGGER.info(String.format("Created global view index %s", globalViewIndexSQL));
+                    cstmt.execute(globalViewIndexSQL);
                 }
 
                 return getRowKeyMatchersFromView(globalConnection.unwrap(PhoenixConnection.class),
@@ -320,12 +345,16 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                                 "CONSTRAINT pk PRIMARY KEY (ZID)) " + "AS SELECT * FROM %s %s %s";
                 String VIEW_WO_PK_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s AS SELECT * from %s %s";
                 if (extendPK) {
-                    cstmt.execute(
+                    String viewWithPKSQL =
                             String.format(VIEW_WITH_PK_TEMPLATE, tenantViewName, globalViewName,
-                                    getWhereClause(pkNames, pkTypes), tenantViewOptions));
+                                    getWhereClause(pkNames, pkTypes), tenantViewOptions);
+                    LOGGER.info(String.format("Created tenant view (WITH_PK) %s", viewWithPKSQL));
+                    cstmt.execute(viewWithPKSQL);
                 } else {
-                    cstmt.execute(String.format(VIEW_WO_PK_TEMPLATE, tenantViewName, globalViewName,
-                            tenantViewOptions));
+                    String viewWithoutPKSQL = String.format(VIEW_WO_PK_TEMPLATE, tenantViewName, globalViewName,
+                            tenantViewOptions);
+                    LOGGER.info(String.format("Created tenant view ((WO_PK)) %s", viewWithoutPKSQL));
+                    cstmt.execute(viewWithoutPKSQL);
                 }
                 return getRowKeyMatchersFromView(tenantConnection.unwrap(PhoenixConnection.class),
                         tenantViewName);
@@ -524,12 +553,14 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                         view.getTableName().getString());
         byte[]
                 rowKeyMatcher1 =
-                WhereOptimizer.getRowKeyMatcher(viewStatementContext, tableName, viewStatementTable,
-                        whereExpression);
+                PVarbinaryEncoded.INSTANCE.toBytes(
+                        WhereOptimizer.getRowKeyMatcher(viewStatementContext, tableName,
+                                viewStatementTable, whereExpression));
         byte[]
                 rowKeyMatcher2 =
-                WhereOptimizer.getRowKeyMatcher(connection, tableName, viewStatementTable,
-                        viewColumnConstantsToBe, isViewColumnReferencedToBe);
+                PVarbinaryEncoded.INSTANCE.toBytes(
+                        WhereOptimizer.getRowKeyMatcher(connection, tableName, viewStatementTable,
+                                viewColumnConstantsToBe, isViewColumnReferencedToBe));
         LOGGER.debug(String.format(
                 "target-view-name = %s, physical = %s, stmt-table = %s\n, " +
                         "row-matcher-0 = %s (syscat)\n, row-matcher-1 = %s\n, row-matcher-2 = %s\n",
@@ -633,6 +664,24 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 //pkTypeStr = "TIMESTAMP";
                 builder.append(pkNames[b]).append(" = ")
                         .append(" TO_TIMESTAMP('2019-10-27T16:17:57+00:00') ");
+                break;
+            case Types.VARBINARY:
+                // pkTypeStr = "VARBINARY";
+                builder.append(pkNames[b]).append(" = ")
+                        .append("'").append(Bytes.toStringBinary(ByteUtil.concat(
+                                RandomStringUtils.randomAlphanumeric(25).getBytes(),
+                                Bytes.toBytes(rnd.nextInt(50000)),
+                                Bytes.toBytes(Math.floor(rnd.nextInt(50000) * rnd.nextDouble())))))
+                        .append("'");
+                break;
+            case 9000:
+                // pkTypeStr = "VARBINARY_ENCODED";
+                builder.append(pkNames[b]).append(" = ")
+                        .append("'").append(StringUtil.escapeStringConstant(Bytes.toStringBinary(ByteUtil.concat(
+                                RandomStringUtils.randomAlphanumeric(25).getBytes(),
+                                Bytes.toBytes(rnd.nextInt(50000)),
+                                Bytes.toBytes(Math.floor(rnd.nextInt(50000) * rnd.nextDouble()))))))
+                        .append("'");
                 break;
             default:
                 // pkTypeStr = "VARCHAR(25)";
@@ -755,6 +804,9 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         // Test Case 7: PK1 = Varchar, PK2 = Varchar, PK3 = Integer
         // last PK cannot be of variable length when creating a view on top of it
         testCases.add(new PDataType[] { PVarchar.INSTANCE, PVarchar.INSTANCE, PInteger.INSTANCE });
+
+        // Test Case 8: PK1 = VARBINARY_ENCODED, PK2 = Varchar, PK3 = VARBINARY_ENCODED
+        testCases.add(new PDataType[] { PVarbinaryEncoded.INSTANCE, PVarchar.INSTANCE, PVarbinaryEncoded.INSTANCE });
 
         return testCases;
     }
