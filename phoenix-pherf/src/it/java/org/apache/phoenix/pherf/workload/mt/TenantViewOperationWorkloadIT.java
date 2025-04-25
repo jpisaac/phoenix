@@ -111,6 +111,20 @@ public class TenantViewOperationWorkloadIT extends ParallelStatsDisabledIT {
         }
     }
 
+
+    @Test public void testVariousOperations() throws Exception {
+
+        DataModel model = multiTenantTestUtils.readTestDataModel(
+                "/scenario/test_mt_workload_template.xml");
+        for (Scenario scenario : model.getScenarios()) {
+            TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
+            scenario.setGeneratorName(generatorType.name());
+            scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
+            multiTenantTestUtils.testVariousOperations(properties, model, scenario.getName(),
+                    settings.expectedTenantGroups, settings.expectedOpGroups);
+        }
+    }
+
     @Test public void testWorkloadWithOneHandler() throws Exception {
         int numHandlers = 1;
 

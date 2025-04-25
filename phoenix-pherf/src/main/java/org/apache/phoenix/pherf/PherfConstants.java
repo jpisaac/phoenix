@@ -42,6 +42,7 @@ public class PherfConstants {
     public static final String DEFAULT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";
     public static final ZoneId DEFAULT_TIME_ZONE = ZoneId.of("UTC");
     public static final String RESOURCE_SCENARIO = "/scenario";
+    public static final String RESOURCE_PROFILE = "/profile";
     public static final String
             SCENARIO_ROOT_PATTERN =
             		".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
