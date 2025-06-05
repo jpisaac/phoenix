@@ -467,6 +467,8 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CQSI_THREAD_POOL_MAX_THREADS = 25;
     public static final int DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE = 512;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
+    public static final Boolean DEFAULT_ALLOW_CONCURRENT_VIEW_MODIFICATION = true;
+
 
 
     private final Configuration config;

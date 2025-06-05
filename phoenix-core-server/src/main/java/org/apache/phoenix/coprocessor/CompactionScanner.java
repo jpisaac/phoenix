@@ -446,7 +446,9 @@ public class CompactionScanner implements InternalScanner {
         LOGGER.info("Closing CompactionScanner for table " + tableName + " store "
                 + columnFamilyName + (major ? " major " : " not major ") + "compaction retained "
                 + outputCellCount + " of " + inputCellCount + " cells"
-                + (phoenixLevelOnly ? " phoenix level only" : ""));
+                + (phoenixLevelOnly ? " phoenix level only" : "") +
+                " in " + (EnvironmentEdgeManager.currentTimeMillis() - compactionTime) + " ms"
+        );
         if (forceMinorCompaction) {
             forceMinorCompaction = false;
         }

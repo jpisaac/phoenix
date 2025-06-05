@@ -397,6 +397,7 @@ public interface QueryServices extends SQLCloseable {
     // Enables https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html#allowCoreThreadTimeOut-boolean-
     String CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT
             = "phoenix.cqsi.thread.pool.allow.core.thread.timeout";
+    String ALLOW_CONCURRENT_VIEW_MODIFICATION = "phoenix.allow.concurrent.view.modification";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

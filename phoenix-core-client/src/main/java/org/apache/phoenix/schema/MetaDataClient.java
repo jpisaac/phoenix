@@ -2355,6 +2355,10 @@ public class MetaDataClient {
      */
     private boolean writeCell(String tenantId, String schemaName, String tableName, String columnName)
             throws SQLException {
+        boolean allowConcurrentModifications = connection.getQueryServices().getProps().getBoolean(
+                QueryServices.ALLOW_CONCURRENT_VIEW_MODIFICATION,
+                QueryServicesOptions.DEFAULT_ALLOW_CONCURRENT_VIEW_MODIFICATION);
+        if (allowConcurrentModifications) return true;
         return connection.getQueryServices().writeMutexCell(tenantId, schemaName, tableName, columnName, null);
     }
 
@@ -2363,6 +2367,10 @@ public class MetaDataClient {
      */
     private void deleteCell(String tenantId, String schemaName, String tableName, String columnName)
             throws SQLException {
+        boolean allowConcurrentModifications = connection.getQueryServices().getProps().getBoolean(
+                QueryServices.ALLOW_CONCURRENT_VIEW_MODIFICATION,
+                QueryServicesOptions.DEFAULT_ALLOW_CONCURRENT_VIEW_MODIFICATION);
+        if (allowConcurrentModifications) return;
         connection.getQueryServices().deleteMutexCell(tenantId, schemaName, tableName, columnName, null);
     }
 
