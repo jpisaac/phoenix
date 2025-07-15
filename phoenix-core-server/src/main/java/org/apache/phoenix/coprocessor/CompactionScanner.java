@@ -559,6 +559,7 @@ public class CompactionScanner implements InternalScanner {
             List<TableTTLInfo> tableList = null;
             RowKeyMatcher matcher  = new RowKeyMatcher();
             String regionName = region.getRegionInfo().getEncodedName();
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
             switch (type) {
             case GLOBAL_INDEXES:
@@ -649,14 +650,15 @@ public class CompactionScanner implements InternalScanner {
                 });
             }
 
-            LOGGER.debug(String.format("Initialized matcher for type r=%s, t=%s :- " +
-                            "s=%s, e=%s, c=%s, l=%s",
+            LOGGER.info(String.format("Initialized matcher for type r=%s, t=%s :- " +
+                            "s=%s, e=%s, c=%s, l=%s, time=%d",
                     regionName,
                     type,
                     startTenantId,
                     endTenantId,
                     currentTenantId,
-                    lastTenantId));
+                    lastTenantId,
+                    (EnvironmentEdgeManager.currentTimeMillis() - startTime)));
 
             return matcher;
         }
@@ -668,6 +670,8 @@ public class CompactionScanner implements InternalScanner {
             List<TableTTLInfo> tableList = null;
             String regionName = region.getRegionInfo().getEncodedName();
             int catalogAccessBatchSize = NO_BATCH;
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
+
             switch (type) {
             case TENANT_INDEXES:
                 this.tenantIndexMatcher = new RowKeyMatcher();
@@ -726,9 +730,9 @@ public class CompactionScanner implements InternalScanner {
 
                     }
                 });
-                if (LOGGER.isTraceEnabled()) {
-                    LOGGER.trace("Refreshed matcher for type  r={}, t={}:- " +
-                                    "rs={}, re={}, s={}, e={}, c={}, l={}",
+                if (LOGGER.isInfoEnabled()) {
+                    LOGGER.info("Refreshed matcher for type  r={}, t={}:- " +
+                                    "rs={}, re={}, s={}, e={}, c={}, l={}, time={}",
                             regionName,
                             type,
                             Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
@@ -736,7 +740,8 @@ public class CompactionScanner implements InternalScanner {
                             startTenantId,
                             endTenantId,
                             currentTenantId,
-                            lastTenantId);
+                            lastTenantId,
+                            (EnvironmentEdgeManager.currentTimeMillis() - startTime));
                 }
             }
         }
