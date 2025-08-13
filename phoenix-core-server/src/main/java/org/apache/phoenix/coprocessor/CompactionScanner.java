@@ -492,6 +492,7 @@ public class CompactionScanner implements InternalScanner {
         private boolean isSharedIndex = false;
         private boolean isMultiTenant = false;
         private boolean isSalted = false;
+        private boolean isViewTTLEnabledForTenants;
         private boolean shouldBatchCatalogAccess = true;
         private RowKeyParser rowKeyParser;
         private PTable baseTable;
@@ -514,6 +515,7 @@ public class CompactionScanner implements InternalScanner {
                 boolean isSalted,
                 boolean isSharedIndex,
                 boolean isLongViewIndexEnabled,
+                boolean isViewTTLEnabledForTenants,
                 int viewTTLTenantViewsPerScanLimit) throws SQLException {
             this.baseTable = table;
             this.globalViewTTLCache = new TableTTLInfoCache();
@@ -527,6 +529,7 @@ public class CompactionScanner implements InternalScanner {
             this.isSharedIndex = isSharedIndex || localIndex ;
             this.isSalted = isSalted;
             this.isMultiTenant = table.isMultiTenant();
+            this.isViewTTLEnabledForTenants = isViewTTLEnabledForTenants;
             this.viewTTLTenantViewsPerScanLimit = viewTTLTenantViewsPerScanLimit;
             initializeMatchers();
         }
@@ -569,6 +572,7 @@ public class CompactionScanner implements InternalScanner {
                         false, true);
                 break;
             case TENANT_INDEXES:
+                if (!isViewTTLEnabledForTenants) break;
                 try {
                     startTenantId = rowKeyParser.getTenantIdFromRowKey(
                             region.getRegionInfo().getStartKey());
@@ -593,6 +597,7 @@ public class CompactionScanner implements InternalScanner {
                         true, false);
                 break;
             case TENANT_VIEWS:
+                if (!isViewTTLEnabledForTenants) break;
                 try {
                     startTenantId = rowKeyParser.getTenantIdFromRowKey(
                             region.getRegionInfo().getStartKey());
@@ -676,6 +681,7 @@ public class CompactionScanner implements InternalScanner {
             case TENANT_INDEXES:
                 this.tenantIndexMatcher = new RowKeyMatcher();
                 this.tenantIndexTTLCache = new TableTTLInfoCache();
+                if (!isViewTTLEnabledForTenants) break;
                 if (currentTenantId != null && !currentTenantId.isEmpty()) {
                     tableList = getMatchPatternsForTenant(
                             this.baseTable.getName().getString(),
@@ -687,6 +693,7 @@ public class CompactionScanner implements InternalScanner {
                 this.tenantViewMatcher  = new RowKeyMatcher();
                 this.tenantViewTTLCache = new TableTTLInfoCache();
 
+                if (!isViewTTLEnabledForTenants) break;
                 if (shouldBatchCatalogAccess) {
                     tableList = getMatchPatternsForTenantBatch(
                             this.baseTable.getName().getString(),
@@ -1335,10 +1342,14 @@ public class CompactionScanner implements InternalScanner {
         ) throws IOException {
 
             try {
+                boolean isViewTTLEnabledForTenants =
+                        env.getConfiguration().getBoolean(QueryServices.PHOENIX_VIEW_TTL_FOR_TENANTS_ENABLED,
+                                QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_FOR_TENANTS_ENABLED);
+
                 // Initialize the various matcher indexes
                 this.tableRowKeyMatcher =
                         new PartitionedTableRowKeyMatcher(table, isSalted, isSharedIndex,
-                                isLongViewIndexEnabled, viewTTLTenantViewsPerScanLimit);
+                                isLongViewIndexEnabled, isViewTTLEnabledForTenants, viewTTLTenantViewsPerScanLimit);
                 boolean ttlFromDescriptor = false;
                 try {
                     if (table.getTTLExpression().equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {

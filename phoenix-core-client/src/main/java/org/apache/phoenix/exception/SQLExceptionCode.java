@@ -395,6 +395,9 @@ public enum SQLExceptionCode {
     CDC_ALREADY_ENABLED(10963, "44A45",
             "CDC on this table is either enabled or is in the process of being enabled."),
 
+    TTL_NOT_SUPPORTED_FOR_TENANTS(10964, "44A46", TTL
+            + " property can only be set for global tables and updatable views only"),
+
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
         @Override
