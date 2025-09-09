@@ -1213,6 +1213,12 @@ public class MetaDataClient {
       QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
   }
 
+  private boolean isViewTTLEnabledForTenants() {
+    return connection.getQueryServices().getConfiguration().
+            getBoolean(QueryServices.PHOENIX_VIEW_TTL_FOR_TENANTS_ENABLED,
+            QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_FOR_TENANTS_ENABLED);
+  }
+
   public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
     throws SQLException {
     // Don't mistakenly commit pending rows
@@ -2507,6 +2513,15 @@ public class MetaDataClient {
         if (!isViewTTLEnabled() && tableType == VIEW) {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_TTL_NOT_ENABLED)
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+        }
+
+        if (tenantIdStr != null && !isViewTTLEnabledForTenants() && tableType == VIEW) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                  TTL_NOT_SUPPORTED_FOR_TENANTS)
+                  .setSchemaName(schemaName)
+                  .setTableName(tableName)
+                  .build()
+                  .buildException();
         }
 
         if (!MetaDataUtil.isTTLSupported(tableType, viewType, fullTableName)) {
@@ -4632,6 +4647,7 @@ public class MetaDataClient {
       && (table.getIndexType() == IndexType.LOCAL || table.getViewIndexId() != null);
     String tenantIdToUse =
       connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
+    String tenantIdStr = tenantId == null ? null : tenantId.getString();
     String schemaName = table.getSchemaName().getString();
     String tableName = table.getTableName().getString();
     PName physicalName = table.getPhysicalName();
@@ -4740,6 +4756,14 @@ public class MetaDataClient {
           if (!ttlAlreadyDefined.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
               .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+          }
+          if (tenantIdStr != null && !isViewTTLEnabledForTenants() && tableType == VIEW) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                    TTL_NOT_SUPPORTED_FOR_TENANTS)
+                    .setSchemaName(schemaName)
+                    .setTableName(tableName)
+                    .build()
+                    .buildException();
           }
 
           /**

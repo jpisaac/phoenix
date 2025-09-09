@@ -483,6 +483,10 @@ public enum SQLExceptionCode {
     "CDC on this table is either enabled or is in the process of being enabled."),
   CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX(10964, "44A46",
     "Cannot set or alter " + PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY + " on an index"),
+  TTL_NOT_SUPPORTED_FOR_TENANTS(10965, "44A47", TTL
+            + " property can only be set for global tables and updatable views only"),
+
+
 
   /** Sequence related */
   SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
