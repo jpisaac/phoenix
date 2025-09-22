@@ -709,8 +709,8 @@ public class CompactionScanner implements InternalScanner {
                 this.tenantViewMatcher.put(m.getMatchPattern(), tableId);
                 break;
             }
-            if (LOGGER.isTraceEnabled()) {
-              LOGGER.trace("Refreshed matcher for type (updated) {}, {} : {}", regionName,
+            if (LOGGER.isDebugEnabled()) {
+              LOGGER.debug("Refreshed matcher for type (updated) {}, {} : {}", regionName,
                 type.toString(), m);
             }
 

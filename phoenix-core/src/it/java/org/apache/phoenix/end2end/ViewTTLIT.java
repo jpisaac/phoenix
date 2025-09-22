@@ -99,6 +99,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
       {
         put(QueryServices.PHOENIX_COMPACTION_ENABLED, String.valueOf(true));
         put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
+        put(QueryServices.PHOENIX_VIEW_TTL_FOR_TENANTS_ENABLED, Boolean.toString(true));
         put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
         put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         // no max lookback
