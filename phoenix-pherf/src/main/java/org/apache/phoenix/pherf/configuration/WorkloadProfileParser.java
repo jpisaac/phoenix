@@ -71,7 +71,7 @@ public class WorkloadProfileParser {
      * XML configuration
      */
     // TODO Remove static calls
-    public static WorkloadProfile readDataModel(Path file) throws JAXBException, XMLStreamException {
+    public static WorkloadProfile readWorkloadProfile(Path file) throws JAXBException, XMLStreamException {
         XMLInputFactory xif = XMLInputFactory.newInstance();
         xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);
@@ -106,7 +106,7 @@ public class WorkloadProfileParser {
 
     // TODO Remove static calls
     @SuppressWarnings("unused")
-    public static void writeDataModel(WorkloadProfile profile, OutputStream output) throws JAXBException {
+    public static void writeWorkloadProfile(WorkloadProfile profile, OutputStream output) throws JAXBException {
         // create JAXB context and initializing Marshaller
         JAXBContext jaxbContext = JAXBContext.newInstance(WorkloadProfile.class);
         Marshaller jaxbMarshaller = jaxbContext.createMarshaller();
@@ -132,7 +132,7 @@ public class WorkloadProfileParser {
         }
         for (Path path : this.paths) {
             System.out.println("Adding model for path:" + path.toString());
-            this.profiles.add(WorkloadProfileParser.readDataModel(path));
+            this.profiles.add(WorkloadProfileParser.readWorkloadProfile(path));
         }
     }
 

@@ -77,7 +77,7 @@ public class ResourceList {
     private Collection<Path> getResourcesPaths(
             final Pattern pattern) throws Exception {
 
-        final String classPath = System.getProperty("java.class.path", ".");
+        final String classPath = "/Users/jisaac/workspace/forks/projects/phoenix-ttl/phoenix-pherf/target/test-classes"; //System.getProperty("java.class.path", ".");
         final String[] classPathElements = classPath.split(":");
         Set<String> strResources = new HashSet<>();
         Collection<Path> paths = new ArrayList<>();

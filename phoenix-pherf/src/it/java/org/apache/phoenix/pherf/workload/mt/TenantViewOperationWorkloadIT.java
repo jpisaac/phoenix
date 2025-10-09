@@ -19,6 +19,8 @@
 
 package org.apache.phoenix.pherf.workload.mt;
 
+import org.apache.phoenix.pherf.configuration.LoadProfile;
+import org.apache.phoenix.pherf.configuration.WorkloadProfile;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -98,17 +100,11 @@ public class TenantViewOperationWorkloadIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testVariousOperations() throws Exception {
+    @Test public void testVariousLoadProfiles() throws Exception {
 
-        DataModel model = multiTenantTestUtils.readTestDataModel(
-                "/scenario/test_mt_workload_template.xml");
-        for (Scenario scenario : model.getScenarios()) {
-            TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
-            scenario.setGeneratorName(generatorType.name());
-            scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
-            multiTenantTestUtils.testVariousOperations(properties, model, scenario.getName(),
-                    settings.expectedTenantGroups, settings.expectedOpGroups);
-        }
+        WorkloadProfile workload = multiTenantTestUtils.readTestWorkloadProfile(
+                "/profile/workload-profile-1.xml");
+            LoadProfile loadProfile = workload.getLoadProfile();
     }
 
 

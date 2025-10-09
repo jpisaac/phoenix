@@ -26,6 +26,8 @@ import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.ScenarioParser;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
+import org.apache.phoenix.pherf.configuration.WorkloadProfile;
+import org.apache.phoenix.pherf.configuration.WorkloadProfileParser;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -104,6 +106,14 @@ public class MultiTenantTestUtils {
         Path p = Paths.get(scenarioUrl.toURI());
         return ScenarioParser.readDataModel(p);
     }
+
+    public WorkloadProfile readTestWorkloadProfile(String resourceName) throws Exception {
+        URL profileUrl = WorkloadProfileParser.class.getResource(resourceName);
+        assertNotNull(profileUrl);
+        Path p = Paths.get(profileUrl.toURI());
+        return WorkloadProfileParser.readWorkloadProfile(p);
+    }
+
 
     public void testWorkloadWithCountingHandlers(Properties properties, DataModel model,
             String scenarioName,
