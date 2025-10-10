@@ -92,6 +92,18 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+      <version>${project.version}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core-client</artifactId>
     </dependency>
     <dependency>
@@ -156,6 +168,8 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
     </dependency>
 
     <!-- Test Dependencies -->
@@ -204,12 +218,6 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-it</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-server</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
@@ -265,12 +273,27 @@
     <testResources>
       <testResource>
         <directory>src/test/resources</directory>
+        <includes>
+          <include>**/*.sql</include>
+          <include>**/*.xml</include>
+          <include>**/*.properties</include>
+        </includes>
       </testResource>
       <testResource>
         <directory>src/it/resources</directory>
+        <includes>
+          <include>**/*.sql</include>
+          <include>**/*.xml</include>
+          <include>**/*.properties</include>
+        </includes>
       </testResource>
       <testResource>
         <directory>${project.basedir}/config</directory>
+        <includes>
+          <include>**/*.sql</include>
+          <include>**/*.xml</include>
+          <include>**/*.properties</include>
+        </includes>
       </testResource>
     </testResources>
     <plugins>
@@ -281,6 +304,10 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <reuseForks>false</reuseForks>
+          <argLine>-Xmx3000m -XX:MaxPermSize=256m "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+        </configuration>
       </plugin>
       <plugin>
         <artifactId>maven-dependency-plugin</artifactId>

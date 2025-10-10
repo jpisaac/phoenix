@@ -18,6 +18,7 @@
 package org.apache.phoenix.pherf;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
@@ -27,6 +28,7 @@ import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.util.ResourceList;
 import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
@@ -34,10 +36,12 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 public abstract class ResultBaseTestIT extends ParallelStatsDisabledIT {
-  protected static final String matcherScenario = ".*scenario/.*test_scenario.xml";
-  protected static final String matcherSchema = ".*datamodel/.*test_schema.sql";
+//  protected static final String matcherScenario = ".*prod_test_unsalted_scenario\\.xml";
+//  protected static final String matcherSchema = ".*create_prod_test_unsalted\\.sql";
 
-  protected static PhoenixUtil util = PhoenixUtil.create(true);
+  protected static final String matcherScenario = ".*test_scenario.xml";
+  protected static final String matcherSchema = ".*test_schema.sql";
+  protected static PhoenixUtil util;
   protected static Properties properties;
   protected static SchemaReader reader;
   protected static XMLConfigParser parser;
@@ -57,6 +61,9 @@ public abstract class ResultBaseTestIT extends ParallelStatsDisabledIT {
     String dir = properties.getProperty("pherf.default.results.dir");
     resultUtil.ensureBaseDirExists(dir);
 
+    // Initialize util before using it
+    util = PhoenixUtil.create(true);
+    
     reader = new SchemaReader(util, matcherSchema);
     parser = new XMLConfigParser(matcherScenario);
 

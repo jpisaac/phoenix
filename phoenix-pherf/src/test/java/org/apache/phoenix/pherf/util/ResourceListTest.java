@@ -28,12 +28,11 @@ import org.junit.Test;
 public class ResourceListTest {
 
   @Test
-  public void testMissingJarFileReturnsGracefully() {
-    ResourceList rl = new ResourceList("foo");
-    File missingFile = new File("abracadabraphoenix.txt");
-    assertFalse("Did not expect a fake test file to actually exist", missingFile.exists());
+  public void testMissingResourceReturnsGracefully() throws Exception {
+    ResourceList rl = new ResourceList("nonexistent");
+    // Test that looking for resources in a non-existent directory returns empty list
     assertEquals(Collections.emptyList(),
-      rl.getResourcesFromJarFile(missingFile, Pattern.compile("pattern")));
+      rl.getResourceList(".*\\.txt"));
   }
 
 }

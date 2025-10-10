@@ -18,11 +18,12 @@
 package org.apache.phoenix.pherf.util;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.NoSuchFileException;
+import java.nio.file.FileSystemNotFoundException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -32,7 +33,10 @@ import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -48,145 +52,111 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  */
 public class ResourceList {
   private static final Logger LOGGER = LoggerFactory.getLogger(ResourceList.class);
+  private final String resourceType; // e.g., "scenario", "datamodel", "profile"
   private final String rootResourceDir;
   // Lists the directories to ignore meant for testing something else
-  // when getting the resources from classpath
-  private List<String> dirsToIgnore = Lists.newArrayList("sql_files");
+  private List<String> dirsToIgnore = new ArrayList<>();
 
-  public ResourceList(String rootResourceDir) {
-    this.rootResourceDir = rootResourceDir;
+  public ResourceList(String resourceType) {
+    this(resourceType, "");
+  }
+
+  public ResourceList(String resourceType, String rootResourceDir) {
+    // Remove leading slash from resourceType if present
+    if (resourceType.startsWith("/")) {
+      resourceType = resourceType.substring(1);
+    }
+    this.resourceType = resourceType;
+    
+    // Handle rootResourceDir - remove leading slash and ensure trailing slash
+    if (rootResourceDir.startsWith("/")) {
+      rootResourceDir = rootResourceDir.substring(1);
+    }
+    this.rootResourceDir = rootResourceDir.isEmpty() ? "" : 
+                          (rootResourceDir.endsWith("/") ? rootResourceDir : rootResourceDir + "/");
   }
 
   public Collection<Path> getResourceList(final String pattern) throws Exception {
-    // Include files from config directory
-    Collection<Path> paths = getResourcesPaths(Pattern.compile(pattern));
-
-    return paths;
-  }
-
-  /**
-   * for all elements of java.class.path get a Collection of resources Pattern pattern =
-   * Pattern.compile(".*"); gets all resources
-   * @param pattern the pattern to match
-   * @return the resources in the order they are found
-   */
-  private Collection<Path> getResourcesPaths(final Pattern pattern) throws Exception {
-
-    final String classPath = System.getProperty("java.class.path", ".");
-    final String[] classPathElements = classPath.split(":");
-    Set<String> strResources = new HashSet<>();
     Collection<Path> paths = new ArrayList<>();
-
-    // TODO Make getResourcesPaths() return the URLs directly instead of converting them
-    // Get resources as strings.
-    for (final String element : classPathElements) {
-      strResources.addAll(getResources(element, pattern));
+    Pattern compiledPattern = Pattern.compile(pattern);
+    
+    // Get the class loader
+    ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+    if (classLoader == null) {
+      classLoader = ResourceList.class.getClassLoader();
     }
-
-    // Convert resources to URL
-    for (String resource : strResources) {
-      URL url = null;
-      URI uri = null;
-      Path path = null;
-
-      String rName = rootResourceDir + resource;
-
-      LOGGER.debug("Trying with the root append.");
-      url = ResourceList.class.getResource(rName);
-      if (url == null) {
-        LOGGER.debug("Failed! Must be using a jar. Trying without the root append.");
-        url = ResourceList.class.getResource(resource);
-
-        if (url == null) {
-          throw new PherfException("Could not load resources: " + rName);
-        }
-        final String[] splits = url.toString().split("!");
-        uri = URI.create(splits[0]);
-        path = (splits.length < 2) ? Paths.get(uri) : Paths.get(splits[1]);
-      } else {
-        path = Paths.get(url.toURI());
+    
+    // Look for resources of the specified type
+    String resourcePath = this.rootResourceDir + this.resourceType;
+    Enumeration<URL> resources = classLoader.getResources(resourcePath);
+    
+    while (resources.hasMoreElements()) {
+      URL resource = resources.nextElement();
+      if ("file".equals(resource.getProtocol())) {
+        // Handle file system resources
+        processFileSystemResource(resource, compiledPattern, paths);
+      } else if ("jar".equals(resource.getProtocol())) {
+        // Handle JAR resources
+        processJarResource(resource, compiledPattern, paths, classLoader);
       }
-      LOGGER.debug("Found the correct resource: " + path.toString());
-      paths.add(path);
     }
-
-    Collections.sort((List<Path>) paths);
+    
     return paths;
   }
 
-  private Collection<String> getResources(final String element, final Pattern pattern) {
-    final List<String> retVal = new ArrayList<>();
-    if (StringUtils.isBlank(element)) {
-      return retVal;
-    }
-    final File file = new File(element);
-    if (file.isDirectory()) {
-      retVal.addAll(getResourcesFromDirectory(file, pattern));
-    } else {
-      retVal.addAll(getResourcesFromJarFile(file, pattern));
-    }
-    return retVal;
-  }
-
-  // Visible for testing
-  Collection<String> getResourcesFromJarFile(final File file, final Pattern pattern) {
-    final List<String> retVal = new ArrayList<>();
-    ZipFile zf;
+  private void processFileSystemResource(URL resource, Pattern pattern, Collection<Path> paths) throws Exception {
     try {
-      zf = new ZipFile(file);
-    } catch (FileNotFoundException | NoSuchFileException e) {
-      // Gracefully handle a jar listed on the classpath that doesn't actually exist.
-      return Collections.emptyList();
-    } catch (final ZipException e) {
-      throw new Error(e);
-    } catch (final IOException e) {
-      throw new Error(e);
-    }
-    final Enumeration e = zf.entries();
-    while (e.hasMoreElements()) {
-      final ZipEntry ze = (ZipEntry) e.nextElement();
-      final String fileName = ze.getName();
-      final boolean accept = pattern.matcher(fileName).matches();
-      LOGGER.trace("fileName:" + fileName);
-      LOGGER.trace("File:" + file.toString());
-      LOGGER.trace("Match:" + accept);
-      if (accept) {
-        LOGGER.trace("Adding File from Jar: " + fileName);
-        retVal.add("/" + fileName);
-      }
-    }
-    try {
-      zf.close();
-    } catch (final IOException e1) {
-      throw new Error(e1);
-    }
-    return retVal;
-  }
-
-  private Collection<String> getResourcesFromDirectory(final File directory,
-    final Pattern pattern) {
-    final ArrayList<String> retval = new ArrayList<String>();
-    final File[] fileList = directory.listFiles();
-    for (final File file : fileList) {
-      if (isIgnoredDir(file.getAbsolutePath())) continue;
+      File file = new File(resource.toURI());
       if (file.isDirectory()) {
-        retval.addAll(getResourcesFromDirectory(file, pattern));
-      } else {
-        final String fileName = file.getName();
-        final boolean accept = pattern.matcher(file.toString()).matches();
-        if (accept) {
-          LOGGER.debug("Adding File from directory: " + fileName);
-          retval.add("/" + fileName);
+        Files.walk(file.toPath())
+          .filter(Files::isRegularFile)
+          .filter(p -> {
+            // Try matching against both the filename and the full path
+            String fileName = p.getFileName().toString();
+            String fullPath = p.toString();
+            return pattern.matcher(fileName).find() || pattern.matcher(fullPath).find();
+          })
+          .forEach(paths::add);
+      }
+    } catch (Exception e) {
+      LOGGER.error("Error processing file system resource: " + resource, e);
+      throw e;
+    }
+  }
+  
+  private void processJarResource(URL resource, Pattern pattern, 
+                                Collection<Path> paths, ClassLoader classLoader) throws Exception {
+    try {
+      String jarPath = resource.getPath().split("!")[0];
+      if (jarPath.startsWith("file:")) {
+        jarPath = jarPath.substring(5);
+      }
+      
+      try (JarFile jar = new JarFile(jarPath)) {
+        Enumeration<JarEntry> entries = jar.entries();
+        while (entries.hasMoreElements()) {
+          JarEntry entry = entries.nextElement();
+          String entryName = entry.getName();
+          if (entryName.startsWith(this.rootResourceDir + this.resourceType) && 
+              pattern.matcher(entryName).find()) {
+            URL url = classLoader.getResource(entryName);
+            if (url != null) {
+              try {
+                paths.add(Paths.get(url.toURI()));
+              } catch (Exception e) {
+                LOGGER.warn("Could not convert URL to Path: " + url, e);
+              }
+            }
+          }
         }
       }
+    } catch (Exception e) {
+      LOGGER.error("Error processing JAR resource: " + resource, e);
+      throw e;
     }
-    return retval;
   }
 
-  private boolean isIgnoredDir(String path) {
-    for (String dir : dirsToIgnore) {
-      if (path.contains(dir)) return true;
-    }
-    return false;
+  public void setDirsToIgnore(List<String> dirs) {
+    this.dirsToIgnore = dirs;
   }
 }
