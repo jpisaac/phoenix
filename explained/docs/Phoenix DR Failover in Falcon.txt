@@ -1,0 +1,121 @@
+# Phoenix DR Failover in Falcon
+
+### Improving Availability for Phoenix/HBase in Falcon with Disaster Recovery Clusters
+
+**3/30/21** – Phoenix/HBase’s disaster-readiness strategy in Falcon starts with having a 3AZ architecture, which protects in case of an underlying infrastructure/hardware-level failure. However, issues can of course occur within the Phoenix/HBase application layer as well. That is why in addition to having 3AZ, we also designed Falcon DR clusters, which enable us to trigger a failover to a healthy secondary cluster in the event the primary is unhealthy.
+However, until today, the Phoenix/HBase DR failover process in Falcon has had some key limitations: (1) - it requires real-time deployment of config changes, and (2) - it requires a rolling restart of all client (e.g. Core App) servers connecting to the Phoenix/HBase cluster (a very lengthy process). So, we are very excited to **now be rolling out functionality to enable DR failover without needing a restart of client servers or real-time deployment of config changes, allowing it to complete within just seconds.** Once the rollout completes in May 2021, this will allow us to deliver much higher availability should we need to do a DR failover in Falcon.
+
+To ensure our customers’ success, **we will be offering optional customer blitz testing slots during the week of April 26th - 30th (sprint 4b)**. All SOR customers (those whose table(s) have `SOR_ENABLED=TRUE` and/or `REPLICATION_SCOPE=1`) will be contacted directly offline with specifics - please keep these dates in mind and stay tuned.
+
+Check out our Phoenix/HBase DR in Falcon [Confluence page](https://confluence.internal.salesforce.com/x/_hdHEg) for more details and feel free to reach out to us with any questions.
+
+## Overview
+
+Salesforce Phoenix can be be deployed in Falcon with an optional secondary “disaster recovery” cluster in the same region as the primary cluster, so that in the event of a Phoenix application-layer outage on the primary cluster, it is possible to bring back service by failing over to the secondary/DR cluster given it is healthy. As a result, DR clusters can improve overall service availability in the event of such an outage. This is analogous to the widely known Core App concept of a “Site Switch”.
+
+
+## Details
+
+### **How does DR failover affect your use case?**
+
+**Important concept:** A “high availability group” is a classification of the Phoenix/HBase client based on the use case’s availability requirements and configurations. Some use cases prefer *strong consistency* versus *higher availability* (discussion follows). DR failovers are triggered at the HA group level. The failover of one HA group does not affect any connections in other HA groups.
+
+Customer use cases on Phoenix/HBase fall into two main categories based on their availability, resiliency, and CTS requirements:
+
+* **DR replication enabled:** Data will be replicated asynchronously to a disaster recovery (DR) cluster, to enable failover in case the primary cluster is unhealthy. To enable, set `SOR_ENABLED=TRUE` and/or `REPLICATION_SCOPE=1` on your tables.
+* **DR replication disabled:** There is only one cluster where data resides. Data is still replicated across 3AZs to enable failover in the case that the hardware infrastructure is compromised.
+
+In addition, customers can choose the failover behavior based on their consistency and availability requirements:
+
+1. **Strong consistency preferred over availability [Default].** The *default* setting for Phoenix/HBase customers in Falcon. Failover happens via a two-step process: (1) - halt reads/writes on the primary cluster to let recent mutations replicate to the DR, and then (2) - flip the active cluster to be the DR cluster.
+2. **Availability over strong consistency [Opt-in].** An *opt-in* option that is explicitly requested by Phoenix/HBase customers. Little or no time will be given for waiting to let recent edits replicate to the DR before flipping the DR to become active, in order to maximize availability.
+
+Note that the ability to ensure recent mutations replicate to the DR cluster before failing over depends on the severity of the potential outage on the primary. If a failover happens and there is unreplicated data, it still eventually makes it to the DR after the primary is healthy again. As long as the data is immutable, there are no correctness conflicts. Details on the consistency model during a failover are described in the ‘What is the consistency model during a DR failover’ section in [Confluence](https://confluence.internal.salesforce.com/x/_hdHEg).
+
+The following table describes how DR failover affects your use case. *N/A* means no failover occurs for the use case.
+
+| 	| 	| 	| 	| 	|
+|---	|---	|---	|---	|---	|
+|	|Planned Failover	|Unplanned Failover	|
+|---	|---	|---	|
+|Regular (Drill)	|Operational Maintenance	|
+|DR replication enabled	|Stronger Consistency (default)	|N/A - We do not plan to perform drills for strong consistency use cases in production (though we will in dev/test environments).	|There will be a short downtime window (<5 minutes), and in most cases consistency will be guaranteed (we plan carefully with Core App releases and other activities).	|There will be a short downtime window (<5 minutes), and  consistency will be a best-effort depending on the severity of the outage on the primary cluster.	|
+|Higher Availability (opt-in)	|There will be a shorter downtime window (seconds), and consistency will be best-effort but likely some edits won't have replicated. Unreplicated data will eventually arrive at the DR once the primary is healthy again, and as long as the data is immutable then there will be no correctness conflicts.	|Same as cell to the left.	|Same as cell to the left.	|
+|DR replication disabled	|	|N/A - We do not plan to perform planned failovers for tables with DR replication disabled.	|There will be a short downtime (<<5 minutes), and the use case will fail over to a blank dataset on the DR cluster. This may be the best option for use cases that have high availability requirements and use HBase as a cache, for instance.	|
+
+### What triggers a DR failover?
+
+Scenarios that may require the HBase on-call team to trigger a failover include:
+
+* **When an HBase cluster is deemed unhealthy.** HBase team may trigger a DR failover, thereafter clients automatically start talking to the other HBase cluster. HBase customers will be able to continue using HBase service while the HBase team is repairing the broken cluster. There are multiple reasons for a casual failure occurring: infrastructure outage, critical Big Data service failure (for example, ZooKeeper), Phoenix system metadata corruption, server-side software bugs, and so on.
+* **When an HBase cluster is under planned maintenance.** Customers may be disrupted, and if so, all HA groups fail over to the other cluster proactively. This ensures HBase customers do not experience service unavailability. Maintenance is needed for several reasons: a major HBase service upgrade (for example, Hadoop 2 → 3), Kubernetes cluster operation with downtime, and so on.
+* **When an HBase cluster is under extremely high load.** Some HA groups can fail over to the other cluster. This ensures HBase can achieve more reliable performance and improved overall availability. Traffic spikes that are beyond HBase’s scaling out capability and offline analytical jobs will benefit.
+* **When some HBase tables have significantly degraded performance.** The HA group for the affected customer can fail over to the other HBase cluster. This mitigates degraded availability for region-in-transition (RIT) problems, which could take hours to fix manually.
+
+### What is the consistency model during a DR failover?
+
+For consistency, let’s have a closer look at how failover is triggered by the HBase team.
+
+1. Make current active Phoenix/HBase cluster the standby. This puts both HBase clusters in standby state.
+2. Monitor the server-side async replication progress and client-side failover status, when appropriate go to step 3.
+3. Make the target HBase cluster active. This enables HBase service on all CoreApp clients in that HA group again.
+
+In the earlier orchestration flow, step 2 is the “cool-down” time. This step is required for two reasons. First, HBase async replication may take some time to sync all changes from the source cluster. Second, CoreApp clients need time to clean up up old connections before moving on to the new active cluster, collectively. In Figure 3, we can see in CoreApp (a) the Phoenix connections are being closed and HBase replication (the dots ...) are still happening. In (b) all those existing Phoenix connections are closed, and all HBase edits are replicated (no dots ...). Step 2 on the HBase side usually takes up to 5 minutes, configurable per HA group. Without this orchestration, chances are some CoreApp clients are still talking to the old HBase cluster while the others turn to the new one. If that happens, data consistency is not guaranteed. Deciding the cool-down time is more an art than a science now. HBase team has some ideas to improve this in FY22.
+
+With the cool-down time, we may not be able to 100% guarantee all data has been replicated to the target cluster. For example, the replication queue can be dramatically long, the source cluster could be totally down, the inter-cluster network could be broken, or the public cloud provider takes more time to fix an outage. In that sense, the consistency during failover is best-effort guaranteed. Specially, zero (0) minute cool-down time means clients in that HA group are all immune to this possible inconsistency during failover, and would prefer availability over stronger consistency. Not meeting a strong consistency guarantee does not necessarily mean data loss. As described in [Replication in Phoenix](https://salesforce.quip.com/lapKAp7bWpUT), unreplicated edits on one cluster will appear eventually in the peer cluster whenever both clusters are up. For immutable use cases (namely *most* use cases of Phoenix), consistency is *eventual -* with a long time. Some data is just not available; it’s not a data loss.
+
+### **How does Phoenix/HBase DR failover in Falcon work for Core App use cases?**
+
+CoreApp creates Phoenix connections by calling the Phoenix client module. The Phoenix client registers a watcher for every HA group. After a cluster role change, the Phoenix client will be notified and take action accordingly, in two steps:
+
+1. If the active HBase cluster becomes the standby, it will first stop accepting any new Phoenix connection requests. Meanwhile, it closes all existing Phoenix connections in that HA group. Any client that tries to use those closed Phoenix connections will get `FailoverSQLException`, a subclass of `jdbc.sql.SQLException`.
+2. If the other HBase cluster is active, it will then accept new Phoenix connection requests. If the other HBase cluster is also standby, it continues to reject any new Phoenix connections until it becomes active.
+
+During the failover process the Phoenix driver will clean up the current context before serving new connections. Until it finishes the clean up and connects to an active HBase cluster, the Phoenix service is *temporarily* unavailable to clients in that HA group. Figure 3 shows an example where step (b) and (c) will be the interval, after which all clients connect to *hbase1a*.
+
+### My application is running out of the Core App - what do I need to know?
+
+For any non-CoreApp use case in Falcon, the same DR feature can be used as well. This is possible because DR feature is implemented in the Phoenix client module instead of in CoreApp. In order to use the Phoenix/HBase Disaster Recovery capability in Falcon, off-Core service owners must make changes in the application:
+
+1. To get a connection, the JDBC URI should contain the endpoint for both HBase clusters, namely, the ZK ensemble. The JDBC properties must contain the high availability (HA) group name, which is created by HBase team up front.
+2. In the case of a `FailoverSQLException, `implement a retry logic that closes the current connection, cleans up local context and opens new a connection. Upon the retry, the new connection automatically points to the new active cluster. Many use cases may already retry their business logic (for example, at request level) for general `SQLException`.
+
+### My application is running in Gridforce Hadoop Jobs – what do I need to know?
+
+For batch analytics workloads (for example, Spark/MapReduce Gridforce jobs), the simple and recommended way of employing two HBase clusters for DR is to retry the whole Job. In Falcon, Gridforce and HBase clusters are totally separated. That means your Job will never failover from one Gridforce cluster to another Gridforce cluster when HBase failover happens. Instead, your Job will be running in the same Gridforce cluster and internally it will talk to one HBase cluster in its lifecycle. Before launching a new Job, the Gridforce launcher first discovers the currently active HBase cluster and sets that as the only HBase cluster in the lifecycle of the Job. If failover or Job failure occurs due to HBase being unavailable, the launcher simply cancels the old Job and launches a new Job. The reason is that those batch analytics jobs are composed of massive short-lived containers at runtime, which may cause too many connections to ZooKeeper to enable DR.
+As of July 2021, HBase/Phoenix team is still working with Gridforce team to form a design and implementation. Hopefully there will no application change if your Job is running with Gridforce and accessing HBase/Phoenix. See work-in-progress doc [Support Gridforce Jobs for HBase DR in Falcon](https://salesforce.quip.com/FVbqABhlJhPN).
+
+### **How are Phoenix/HBase DR clusters in Falcon different than those in 1P?**
+
+In 1P, Phoenix/HBase DR failover requires a Site Switch of the entire stack (including the Core App, for instance), whereas in Falcon we can fail over independently. However, later in FY22 when we plan to introduce this flexibility in 1P as well.
+
+## Using
+
+### What are the prerequisites/changes needed to leverage this feature?
+
+1. **Check if your tables are replicated between two Phoenix/HBase clusters.** You can check the table schema, for example, [this file](https://git.soma.salesforce.com/bigdata-packaging/hbase-schema/blob/master/generated/core/232/goldenfile_core_232.sql) for 232 release. Unless the table definition has `REPLICATION_SCOPE=0` your tables are replicated. If you are not sure, please ask HBase team in [#hbase-phoenix-ha-testing](https://salesforce-internal.slack.com/archives/C01T9DYB96J/p1623262604020000) Slack channel.
+2. **Make sure the Phoenix connection profile your application is using is enabled with the DR failover capability.** A Phoenix connection profile defines the timeout configurations, number of retries, [HA group](https://salesforce.quip.com/ShxdAb0tM35F#ZKOACAxqg1a), and other properties. Unless you explicitly defined a particular connection profile in your code, the one you are using is the default.
+    1. If your code is using the default connection Phoenix connection profile, make a minor code change to use the following connection profile: `PhoenixConnectionProfile.PHOENIX_CONNECTION_PROFILE_DEFAULT_FAILOVER` when creating any connections to Phoenix. Below is an example:
+    2. try {
+          PhoenixContext.getProvider().establish(PhoenixConnectionProfile.PHOENIX_CONNECTION_PROFILE_DEFAULT_FAILOVER);
+          try (Connection con = PhoenixConnectionUtil.getConnection()) { // or use pliny
+            // use connection in CRUD operations for your business logic
+            ...
+          }
+        } finally {
+          PhoenixContext.getProvider().release();
+        }
+    3. If you are already using a Phoenix connection profile, post in Slack channel `#hbase-phoenix-ha-testing. T`he HBase team will make the config change required to enable DR failover for your connection profile. The change only enables DR in Falcon for FI:FD `perf1-useast2:core1` so that no Falcon production cluster is affected. HBase team will notify you after  we've successfully made this change.
+3. **Make sure your code does not reuse Phoenix connections for different user requests.** Phoenix connections are considered lightweight and need not be reused across requests. More importantly, when DR failover happens in Falcon, all existing Phoenix connections are closed. In order to use the other cluster, your application has to get a new connection. Reusing existing connections returns `FailoverSQLException`. It’s fine to use the same connection for multiple related `Statement` or `PreparedStatement` requests for multiple data operations of the same request. Make sure:
+    1. Do not pool Phoenix connections.
+    2. Every RESTful API call to your service gets a new Phoenix connection.
+    3. (Optional) If `SQLException` is thrown and you need to retry for the user request, make sure to try with a new Phoenix connection (and hence `Statement`/`PreparedStatement`).
+
+## Testing
+
+### How to test my application code with this feature?
+
+Please see this doc for details: [Customer Testing Guide for Phoenix DR Failover in Falcon](https://salesforce.quip.com/k7aVA5SmhZAM)
+
+
+*Last modified: May 2021*

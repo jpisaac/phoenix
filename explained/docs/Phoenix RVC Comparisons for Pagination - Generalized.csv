@@ -1,0 +1,99 @@
+,DDL,Index,Query,Version,Explain,StartRow,QueryRow,Stop Row,Failure(s)
+Not fully qualified PK,"CREATE TABLE T000001(
+    ORGANIZATION_ID CHAR(15) NOT NULL,
+col0 TINYINT NOT NULL,
+col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (
+        ORGANIZATION_ID,
+col0 DESC,
+col1 DESC    )
+) MULTI_TENANT=TRUE",None,"SELECT col0,col1
+FROM T000001
+WHERE organization_id = 'org1'
+AND (col0,col1) > (126,-17)
+ORDER BY col0 DESC,
+col1 DESC", 4.13.0-hbase-0.98-sfdc-1,"CLIENT PARALLEL 1-WAY RANGE SCAN OVER T000001 ['org1           ']    SERVER FILTER BY FIRST KEY ONLY AND (COL0, COL1) > (TO_TINYINT(126), TO_TINYINT(-17))
+",6F7267312020202020202020202020,6F72673120202020202020202020200190,,"The start row of the scan includes the QueryRow, the filter should not be needed but due to the bad start row is necessary"
+,"CREATE TABLE T000001(
+    ORGANIZATION_ID CHAR(15) NOT NULL,
+col0 TINYINT NOT NULL,
+col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (
+        ORGANIZATION_ID,
+col0,
+col1    )
+) MULTI_TENANT=TRUE",None,"SELECT col0,col1
+FROM T000001
+WHERE organization_id = 'org1'
+AND (col0,col1) > (-127,16)
+ORDER BY col0,
+col1", 4.13.0-hbase-0.98-sfdc-1,"CLIENT PARALLEL 1-WAY RANGE SCAN OVER T000001 ['org1           ']    SERVER FILTER BY FIRST KEY ONLY AND (COL0, COL1) > (TO_TINYINT(-127), TO_TINYINT(16))
+",6F7267312020202020202020202020,6F72673120202020202020202020200190,,"The start row of the scan includes the QueryRow, the filter should not be needed but due to the bad start row is necessary"
+,"CREATE TABLE T000001(
+    ORGANIZATION_ID CHAR(15) NOT NULL,
+col0 TINYINT NOT NULL,
+col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (
+        ORGANIZATION_ID,
+col0,
+col1 DESC    )
+) MULTI_TENANT=TRUE",None,"SELECT col0,col1
+FROM T000001
+WHERE organization_id = 'org1'
+AND (col0,col1) > (-127,-17)
+ORDER BY col0,
+col1 DESC", 4.13.0-hbase-0.98-sfdc-1,"CLIENT PARALLEL 1-WAY RANGE SCAN OVER T000001 ['org1           ']    SERVER FILTER BY FIRST KEY ONLY AND (COL0, COL1) > (TO_TINYINT(-127), TO_TINYINT(-17))
+",6F7267312020202020202020202020,6F72673120202020202020202020200190,,"The start row of the scan includes the QueryRow, the filter should not be needed but due to the bad start row is necessary"
+,"CREATE TABLE T000001(
+    ORGANIZATION_ID CHAR(15) NOT NULL,
+col0 TINYINT NOT NULL,
+col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (
+        ORGANIZATION_ID,
+col0 DESC,
+col1    )
+) MULTI_TENANT=TRUE
+",None,"SELECT col0,col1
+FROM T000001
+WHERE organization_id = 'org1'
+AND (col0,col1) > (126,16)
+ORDER BY col0 DESC,
+col1", 4.13.0-hbase-0.98-sfdc-1,"CLIENT PARALLEL 1-WAY RANGE SCAN OVER T000001 ['org1           ']    SERVER FILTER BY FIRST KEY ONLY AND (COL0, COL1) > (TO_TINYINT(126), TO_TINYINT(16))
+",6F7267312020202020202020202020,6F72673120202020202020202020200190,,"The start row of the scan includes the QueryRow, the filter should not be needed but due to the bad start row is necessary"
+Salted,"""CREATE TABLE T000001(\n"" + ""    ORGANIZATION_ID CHAR(15) NOT NULL,\n""
+                + ""col0 TINYINT NOT NULL,\n""
+                + ""col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n""
+                + ""        ORGANIZATION_ID,\n"" + ""col0,\n"" + ""col1 DESC    )\n""
+                + "") MULTI_TENANT=TRUE, SALT_BUCKETS = 20\n"";",,"EXPLAIN SELECT col0,col1
+FROM T000001
+WHERE organization_id = 'org1'
+AND (organization_id,col0,col1) > ('org1',-127,-17)
+ORDER BY col0,
+col1 DESC", 4.13.0-hbase-0.98-sfdc-2,"CLIENT PARALLEL 20-WAY RANGE SCAN OVER T000001 [0,'org1           ',-127,~-18] - [19,'org1           ']
+    SERVER FILTER BY FIRST KEY ONLY
+CLIENT MERGE SORT",006F72673120202020202020202020200191,,006F7267312020202020202020202021,None
+Qualified PK,"""CREATE TABLE T000001(\n"" + ""    ORGANIZATION_ID CHAR(15) NOT NULL,\n""
+                + ""col0 TINYINT NOT NULL,\n""
+                + ""col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n""
+                + ""        ORGANIZATION_ID,\n"" + ""col0 DESC,\n"" + ""col1     )\n""
+                + "") MULTI_TENANT=TRUE\n"";",,"SELECT col0,col1
+FROM T000001
+WHERE (organization_id,col0,col1) > ('org1',-127,-17)
+ORDER BY organization_id, col0 DESC, col1", 4.13.0-hbase-0.98-sfdc-3,"CLIENT PARALLEL 1-WAY FULL SCAN OVER T000001
+    SERVER FILTER BY FIRST KEY ONLY
+",6F7267312020202020202020202020FE70,,,
+Qualified PK First Key DESC mixed,"""CREATE TABLE T000001(\n""
+                + ""col0 TINYINT NOT NULL,\n""
+                + ""col1 TINYINT NOT NULL    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n""
+                + ""        col0 DESC,\n"" + ""col1     )\n""
+                + "") \n"";",,"""SELECT col0,col1\n"" + ""FROM T000001\n""
+                + ""WHERE (col0,col1) > (-127,-17)\n""
+                + ""ORDER BY col0 DESC, col1""", 4.13.0-hbase-0.98-sfdc-4,"CLIENT PARALLEL 1-WAY FULL SCAN OVER T000001
+    SERVER FILTER BY FIRST KEY ONLY",,,FE6F,Bad startrow and stop row
+Index Qualfied First Key ASC mixed,"""CREATE TABLE T000001(\n""
+                + ""col0 TINYINT NOT NULL,\n""
+                + ""col1 TINYINT NOT NULL,\n""
+                + ""col2 TINYINT NOT NULL\n""
+                + ""    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n""
+                + ""        col0, col1 , col2 )\n""
+                + "") \n"";","""CREATE INDEX t000001_IDX ON T000001 (col1, col2 DESC)""","
+        String query = ""SELECT col0,col1\n"" + ""FROM T000001\n""
+                + ""WHERE (col1,col2) > (-127,-17)\n""
+                + ""ORDER BY col1, col2 DESC", 4.13.0-hbase-0.98-sfdc-6,"CLIENT PARALLEL 1-WAY FULL SCAN OVER T000001_IDX
+    SERVER FILTER BY FIRST KEY ONLY",191,,,
